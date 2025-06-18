@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CDN Detector</title>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      width: 400px;
+      min-height: 300px;
+    }
+    .header {
+      font-weight: bold;
+    }
+    .toggle {
+      margin: 10px 0;
+      display: flex;
+      align-items: center;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 30px;
+      margin-left: 10px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: 0.4s;
+      border-radius: 30px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 24px;
+      width: 24px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #4caf50;
+    }
+    input:checked + .slider:before {
+      transform: translateX(30px);
+    }
+    
+    /* 新增：日誌區域樣式 */
+    #logContainer h3 {
+      color: #333;
+      margin: 0 0 10px 0;
+      font-size: 14px;
+    }
+    
+    #logContainer button {
+      border: 1px solid #ddd;
+      background-color: #f5f5f5;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    
+    #logContainer button:hover {
+      background-color: #e0e0e0;
+    }
+    
+    #logContainer button:active {
+      background-color: #d0d0d0;
+    }
+    
+    #logContent::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    #logContent::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+    
+    #logContent::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 3px;
+    }
+    
+    #logContent::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    .status-section {
+      background-color: #f9f9f9;
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+    
+    .status-section p {
+      margin: 5px 0;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>CDN Detector</h1>
+  <div class="toggle">
+    <label class="header">Enable CDN Detection</label>
+    <label class="switch">
+      <input type="checkbox" id="enableToggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <div class="status-section">
+    <p>檢測狀態：<span id="detectionStatus">未啟用</span></p>
+    <p>檢測結果：<span id="detectionResult">N/A</span></p>
+  </div>
+  
+  <!-- 日誌區域將由 JavaScript 動態添加 -->
+  
+  <script src="popup.js"></script>
+</body>
+</html> 
