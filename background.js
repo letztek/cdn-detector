@@ -2,7 +2,6 @@ let cdnDetectionEnabled = false;
 let webRequestListener = null;
 let beforeRequestListener = null; // 新增：請求開始監聽器
 let requestStartTimes = {}; // 新增：追蹤請求開始時間
-let detectionLog = []; // 新增：存儲檢測日誌
 let currentTabId = null; // 新增：當前活躍標籤頁 ID
 let tabDetectionData = {}; // 新增：按標籤頁分組的檢測資料
 
@@ -51,60 +50,656 @@ function getDomain(url) {
   }
 }
 
-// 新增：增強的 CDN 檢測邏輯
+// CDN 檢測配置系統
+// 配置驗證和管理工具
+const CDN_CONFIG_VALIDATOR = {
+  // 驗證單個 CDN 配置的完整性
+  validateConfig(cdnKey, config) {
+    const errors = [];
+    
+    // 必需字段檢查
+    const requiredFields = ['name', 'confidence', 'priority'];
+    for (const field of requiredFields) {
+      if (!config[field]) {
+        errors.push(`Missing required field: ${field}`);
+      }
+    }
+    
+    // 檢測方法檢查（至少要有一種檢測方法）
+    const detectionMethods = [
+      config.detectionHeaders?.length > 0,
+      config.serverHeaders?.length > 0,
+      config.viaHeaders?.length > 0,
+      config.customParser
+    ];
+    
+    if (!detectionMethods.some(method => method)) {
+      errors.push('At least one detection method must be configured');
+    }
+    
+    // 信心度驗證
+    if (config.confidence && !['high', 'medium', 'low'].includes(config.confidence)) {
+      errors.push('Confidence must be one of: high, medium, low');
+    }
+    
+    // 優先級驗證
+    if (config.priority && (!Number.isInteger(config.priority) || config.priority < 1)) {
+      errors.push('Priority must be a positive integer');
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors: errors
+    };
+  },
+  
+  // 驗證所有配置
+  validateAllConfigs(configs) {
+    const results = {};
+    const priorities = [];
+    
+    for (const [cdnKey, config] of Object.entries(configs)) {
+      results[cdnKey] = this.validateConfig(cdnKey, config);
+      if (config.priority) {
+        priorities.push(config.priority);
+      }
+    }
+    
+    // 檢查優先級重複
+    const duplicatePriorities = priorities.filter((priority, index) => 
+      priorities.indexOf(priority) !== index
+    );
+    
+    if (duplicatePriorities.length > 0) {
+      for (const [cdnKey] of Object.entries(configs)) {
+        if (duplicatePriorities.includes(configs[cdnKey].priority)) {
+          results[cdnKey].errors.push(`Duplicate priority: ${configs[cdnKey].priority}`);
+          results[cdnKey].valid = false;
+        }
+      }
+    }
+    
+    return results;
+  },
+  
+  // 動態添加 CDN 配置
+  addCDNConfig(cdnKey, config) {
+    const validation = this.validateConfig(cdnKey, config);
+    if (!validation.valid) {
+      logMessage(`Failed to add CDN config ${cdnKey}: ${validation.errors.join(', ')}`, 'error');
+      return false;
+    }
+    
+    CDN_CONFIGS[cdnKey] = config;
+    logMessage(`Successfully added CDN config: ${cdnKey}`, 'info');
+    return true;
+  },
+  
+  // 移除 CDN 配置
+  removeCDNConfig(cdnKey) {
+    if (CDN_CONFIGS[cdnKey]) {
+      delete CDN_CONFIGS[cdnKey];
+      logMessage(`Successfully removed CDN config: ${cdnKey}`, 'info');
+      return true;
+    }
+    return false;
+  },
+  
+  // 獲取配置統計
+  getConfigStats() {
+    const configs = Object.values(CDN_CONFIGS);
+    return {
+      totalConfigs: configs.length,
+      highConfidence: configs.filter(c => c.confidence === 'high').length,
+      mediumConfidence: configs.filter(c => c.confidence === 'medium').length,
+      lowConfidence: configs.filter(c => c.confidence === 'low').length,
+      customParsers: configs.filter(c => c.customParser).length,
+      priorities: configs.map(c => c.priority).sort((a, b) => a - b)
+    };
+  }
+};
+
+const CDN_CONFIGS = {
+  cloudflare: {
+    name: 'Cloudflare',
+    detectionHeaders: ['cf-cache-status', 'cf-ray', 'cf-request-id'],
+    serverHeaders: ['cloudflare'],
+    viaHeaders: ['cloudflare'],
+    cacheStatusHeader: 'cf-cache-status',
+    cacheStatusMapping: {
+      'hit': 'HIT',
+      'miss': 'MISS', 
+      'expired': 'MISS',
+      'stale': 'MISS',
+      'dynamic': 'OTHER',
+      'bypass': 'OTHER',
+      'updating': 'OTHER',
+      'revalidated': 'HIT',
+      'ignored': 'OTHER',
+      'deferred': 'OTHER'
+    },
+    confidence: 'high',
+    priority: 1
+  },
+  cloudfront: {
+    name: 'Amazon CloudFront',
+    detectionHeaders: ['x-amz-cf-id', 'x-amz-cf-pop', 'x-amz-server-side-encryption'],
+    serverHeaders: [],
+    viaHeaders: ['cloudfront.net', 'cloudfront'],
+    cacheStatusHeader: 'x-cache',
+    cacheStatusMapping: {
+      'hit from cloudfront': 'HIT',
+      'miss from cloudfront': 'MISS',
+      'refreshhit from cloudfront': 'HIT',
+      'redirect from cloudfront': 'OTHER',
+      'error from cloudfront': 'OTHER',
+      'hit': 'HIT',
+      'miss': 'MISS',
+      'refresh_hit': 'HIT'
+    },
+    confidence: 'high',
+    priority: 2
+  },
+  fastly: {
+    name: 'Fastly',
+    detectionHeaders: ['fastly-debug-digest', 'x-fastly-request-id', 'x-cache-hits'],
+    serverHeaders: [],
+    viaHeaders: ['fastly'],
+    cacheStatusHeader: 'x-cache',
+    cacheStatusMapping: {
+      'hit': 'HIT',
+      'miss': 'MISS',
+      'pass': 'OTHER',
+      'stale': 'MISS',
+      'updating': 'OTHER',
+      'error': 'OTHER'
+    },
+    confidence: 'high',
+    priority: 3
+  },
+  keycdn: {
+    name: 'KeyCDN',
+    detectionHeaders: ['x-edge-location', 'x-keycdn-request-id'],
+    serverHeaders: ['keycdn-engine', 'keycdn'],
+    viaHeaders: ['keycdn'],
+    cacheStatusHeader: 'x-cache',
+    cacheStatusMapping: {
+      'hit': 'HIT',
+      'miss': 'MISS',
+      'expired': 'MISS',
+      'stale': 'MISS',
+      'bypass': 'OTHER'
+    },
+    confidence: 'medium',
+    priority: 4
+  },
+  azure: {
+    name: 'Microsoft Azure CDN',
+    detectionHeaders: ['x-msedge-ref', 'x-azure-ref', 'x-ec-custom-error'],
+    serverHeaders: ['ecacc'], // 移除 microsoft-iis 避免誤判
+    viaHeaders: ['azure'],
+    cacheStatusHeader: 'x-cache',
+    cacheStatusMapping: {
+      'hit': 'HIT',
+      'tcp_hit': 'HIT',
+      'miss': 'MISS',
+      'tcp_miss': 'MISS',
+      'config_nocache': 'OTHER',
+      'uncacheable': 'OTHER',
+      'refresh_hit': 'HIT'
+    },
+    confidence: 'medium',
+    priority: 5
+  },
+  googlecloud: {
+    name: 'Google Cloud CDN',
+    detectionHeaders: ['x-goog-cache-status', 'x-cloud-trace-context'],
+    serverHeaders: ['gfe'],
+    viaHeaders: ['google'],
+    cacheStatusHeader: 'x-goog-cache-status',
+    cacheStatusMapping: {
+      'hit': 'HIT',
+      'miss': 'MISS',
+      'bypass': 'OTHER',
+      'expired': 'MISS',
+      'stale': 'MISS',
+      'refresh_hit': 'HIT'
+    },
+    confidence: 'high',
+    priority: 6
+  },
+  akamai: {
+    name: 'Akamai',
+    detectionHeaders: ['x-akamai-request-id', 'x-akamai-session-info', 'x-check-cacheable'],
+    serverHeaders: ['akamaighost', 'ags'],
+    viaHeaders: ['akamai'],
+    cacheStatusHeader: 'x-cache',
+    cacheStatusMapping: {
+      'hit': 'HIT',
+      'miss': 'MISS',
+      'tcp_hit': 'HIT',
+      'tcp_miss': 'MISS',
+      'refresh_hit': 'HIT',
+      'refresh_miss': 'MISS',
+      'stale': 'MISS',
+      'expired': 'MISS',
+      'none': 'OTHER'
+    },
+    confidence: 'medium',
+    priority: 7
+  },
+  aspirappscdn: {
+    name: 'AspirappsCDN',
+    detectionHeaders: [],
+    serverHeaders: ['aspirappscdn'],
+    viaHeaders: ['aspirappscdn'],
+    cacheStatusHeader: 'via',
+    cacheStatusMapping: {}, // 使用特殊解析邏輯
+    confidence: 'high',
+    priority: 8,
+    customParser: true
+  }
+};
+
+// 新增：多 CDN 檢測邏輯
 function detectCDN(headers, url) {
   const detectionInfo = {
     isCDN: false,
     cdnType: null,
+    cdnTypes: [], // 支援多 CDN 檢測
     viaHeader: null,
     serverHeader: null,
     cacheHeaders: {},
     cacheStatus: null,
     cacheStatusCode: null,
     isHit: null,
-    detectionReason: 'No CDN detected'
+    detectionReason: 'No CDN detected',
+    confidence: 'none',
+    detectionResults: [] // 詳細檢測結果
   };
   
-  // 檢查 Via header（主要檢測方法）
-  const viaHeader = headers.find(header => header.name.toLowerCase() === 'via');
-  if (viaHeader) {
-    detectionInfo.viaHeader = viaHeader.value;
-    logMessage(`Via header found: ${viaHeader.value}`, 'debug');
+  // 建立 header 查找映射（不區分大小寫）
+  const headerMap = {};
+  headers.forEach(header => {
+    headerMap[header.name.toLowerCase()] = header.value;
+  });
+  
+  // 按優先順序檢測各 CDN
+  const cdnKeys = Object.keys(CDN_CONFIGS).sort((a, b) => 
+    CDN_CONFIGS[a].priority - CDN_CONFIGS[b].priority
+  );
+  
+  // 調試：記錄所有可用的 headers
+  const availableHeaders = Object.keys(headerMap);
+  logMessage(`Available headers for ${url}: ${availableHeaders.join(', ')}`, 'debug');
+  
+  for (const cdnKey of cdnKeys) {
+    const config = CDN_CONFIGS[cdnKey];
+    const result = detectSpecificCDN(config, headerMap, cdnKey);
     
-    // 檢測 AspirappsCDN（不區分大小寫）
-    if (viaHeader.value.toLowerCase().includes('aspirappscdn')) {
-      detectionInfo.isCDN = true;
-      detectionInfo.cdnType = 'AspirappsCDN';
-      detectionInfo.detectionReason = 'Via header contains AspirappsCDN';
+    // 調試：記錄每個 CDN 的檢測結果
+    if (result.detectionMethods.length > 0) {
+      logMessage(`${config.name} detection methods: ${JSON.stringify(result.detectionMethods)}`, 'debug');
+    }
+    
+    if (result.detected) {
+      logMessage(`✅ ${config.name} detected: ${result.reason} (confidence: ${result.confidence})`, 'info');
+      detectionInfo.detectionResults.push(result);
       
-      // 解析快取狀態碼
-      const cacheAnalysis = parseAspirappsCDNCacheStatus(viaHeader.value);
-      detectionInfo.cacheStatus = cacheAnalysis.status;
-      detectionInfo.cacheStatusCode = cacheAnalysis.statusCode;
-      detectionInfo.isHit = cacheAnalysis.isHit;
+      // 如果是第一個檢測到的 CDN，設為主要 CDN
+      if (!detectionInfo.isCDN) {
+        detectionInfo.isCDN = true;
+        detectionInfo.cdnType = config.name;
+        detectionInfo.confidence = result.confidence;
+        detectionInfo.detectionReason = result.reason;
+        
+        // 解析快取狀態
+        const cacheResult = parseCacheStatus(config, headerMap, cdnKey);
+        detectionInfo.cacheStatus = cacheResult.status;
+        detectionInfo.cacheStatusCode = cacheResult.statusCode;
+        detectionInfo.isHit = cacheResult.isHit;
+        
+        logMessage(`Cache status for ${config.name}: ${cacheResult.status} (isHit: ${cacheResult.isHit})`, 'debug');
+      }
       
-      logMessage(`✅ AspirappsCDN detected in Via header: ${viaHeader.value} | Cache Status: ${cacheAnalysis.status} (${cacheAnalysis.statusCode})`, 'info');
+      // 添加到 CDN 類型列表
+      detectionInfo.cdnTypes.push({
+        name: config.name,
+        key: cdnKey,
+        confidence: result.confidence,
+        reason: result.reason,
+        detectionMethods: result.detectionMethods
+      });
     }
   }
   
-  // 檢查其他可能的 CDN 指標 headers
-  const relevantHeaders = ['server', 'x-cache', 'x-served-by', 'x-cdn', 'cf-ray', 'x-amz-cf-id'];
-  headers.forEach(header => {
-    const headerName = header.name.toLowerCase();
-    if (relevantHeaders.includes(headerName)) {
-      detectionInfo.cacheHeaders[headerName] = header.value;
-      
-      // 檢查 server header 中是否有 CDN 指標
-      if (headerName === 'server' && header.value.toLowerCase().includes('aspirappscdn')) {
-        detectionInfo.isCDN = true;
-        detectionInfo.cdnType = 'AspirappsCDN';
-        detectionInfo.serverHeader = header.value;
-        detectionInfo.detectionReason = 'Server header contains AspirappsCDN';
-      }
+  // 保存相關 headers
+  const allRelevantHeaders = ['server', 'via', 'x-cache', 'x-served-by', 'x-cdn', 
+                              'cf-ray', 'cf-cache-status', 'x-amz-cf-id', 
+                              'fastly-debug-digest', 'x-goog-cache-status'];
+  
+  allRelevantHeaders.forEach(headerName => {
+    if (headerMap[headerName]) {
+      detectionInfo.cacheHeaders[headerName] = headerMap[headerName];
     }
   });
   
+  // 特別處理 via 和 server headers
+  detectionInfo.viaHeader = headerMap['via'] || null;
+  detectionInfo.serverHeader = headerMap['server'] || null;
+  
+  // 記錄檢測結果
+  if (detectionInfo.isCDN) {
+    const cdnList = detectionInfo.cdnTypes.map(cdn => cdn.name).join(', ');
+    logMessage(`✅ CDN detected: ${cdnList} | Primary: ${detectionInfo.cdnType} | Cache Status: ${detectionInfo.cacheStatus}`, 'info');
+  } else {
+    logMessage(`❌ No CDN detected for ${url}`, 'debug');
+  }
+  
   return detectionInfo;
+}
+
+// 檢測特定 CDN
+function detectSpecificCDN(config, headerMap, cdnKey) {
+  const result = {
+    detected: false,
+    reason: '',
+    confidence: config.confidence,
+    headers: [],
+    detectionMethods: []
+  };
+  
+  let highestConfidence = 'none';
+  let bestReason = '';
+  let detectedHeaders = [];
+  
+  // 高信心度檢測：專有 headers
+  for (const headerName of config.detectionHeaders) {
+    if (headerMap[headerName]) {
+      result.detected = true;
+      result.detectionMethods.push({
+        method: 'detection_header',
+        header: headerName,
+        value: headerMap[headerName],
+        confidence: 'high'
+      });
+      
+      if (highestConfidence !== 'high') {
+        highestConfidence = 'high';
+        bestReason = `${headerName} header detected`;
+        detectedHeaders = [headerName];
+      }
+    }
+  }
+  
+  // 中信心度檢測：server headers（支援正規表達式）
+  for (const serverPattern of config.serverHeaders) {
+    const serverHeader = headerMap['server'];
+    if (serverHeader) {
+      let isMatch = false;
+      let matchType = 'contains';
+      
+      // 檢查是否為正規表達式（以 / 開頭和結尾）
+      if (serverPattern.startsWith('/') && serverPattern.endsWith('/')) {
+        try {
+          const regexPattern = serverPattern.slice(1, -1); // 移除前後的 /
+          const regex = new RegExp(regexPattern, 'i'); // 不區分大小寫
+          isMatch = regex.test(serverHeader);
+          matchType = 'regex';
+        } catch (error) {
+          logMessage(`Invalid regex pattern: ${serverPattern}`, 'warn');
+          // 如果正規表達式無效，回退到字串包含檢查
+          isMatch = serverHeader.toLowerCase().includes(serverPattern.toLowerCase());
+        }
+      } else {
+        // 標準字串包含檢查
+        isMatch = serverHeader.toLowerCase().includes(serverPattern.toLowerCase());
+      }
+      
+      if (isMatch) {
+        result.detected = true;
+        result.detectionMethods.push({
+          method: 'server_header',
+          pattern: serverPattern,
+          header: 'server',
+          value: serverHeader,
+          confidence: 'medium',
+          matchType: matchType
+        });
+        
+        if (highestConfidence === 'none' || (highestConfidence === 'low' && config.confidence !== 'low')) {
+          highestConfidence = config.confidence === 'high' ? 'medium' : config.confidence;
+          bestReason = `Server header ${matchType === 'regex' ? 'matches regex' : 'contains'} ${serverPattern}`;
+          detectedHeaders = ['server'];
+        }
+      }
+    }
+  }
+  
+  // 低信心度檢測：via headers（支援正規表達式）
+  for (const viaPattern of config.viaHeaders) {
+    const viaHeader = headerMap['via'];
+    if (viaHeader) {
+      let isMatch = false;
+      let matchType = 'contains';
+      
+      // 檢查是否為正規表達式（以 / 開頭和結尾）
+      if (viaPattern.startsWith('/') && viaPattern.endsWith('/')) {
+        try {
+          const regexPattern = viaPattern.slice(1, -1); // 移除前後的 /
+          const regex = new RegExp(regexPattern, 'i'); // 不區分大小寫
+          isMatch = regex.test(viaHeader);
+          matchType = 'regex';
+        } catch (error) {
+          logMessage(`Invalid regex pattern: ${viaPattern}`, 'warn');
+          // 如果正規表達式無效，回退到字串包含檢查
+          isMatch = viaHeader.toLowerCase().includes(viaPattern.toLowerCase());
+        }
+      } else {
+        // 標準字串包含檢查
+        isMatch = viaHeader.toLowerCase().includes(viaPattern.toLowerCase());
+      }
+      
+      if (isMatch) {
+        result.detected = true;
+        result.detectionMethods.push({
+          method: 'via_header',
+          pattern: viaPattern,
+          header: 'via',
+          value: viaHeader,
+          confidence: 'low',
+          matchType: matchType
+        });
+        
+        if (highestConfidence === 'none') {
+          highestConfidence = 'low';
+          bestReason = `Via header ${matchType === 'regex' ? 'matches regex' : 'contains'} ${viaPattern}`;
+          detectedHeaders = ['via'];
+        }
+      }
+    }
+  }
+  
+  // 設置最終結果
+  if (result.detected) {
+    result.confidence = highestConfidence;
+    result.reason = bestReason;
+    result.headers = detectedHeaders;
+  }
+  
+  return result;
+}
+
+// 統一的 CDN 快取狀態解析系統
+function parseCacheStatus(config, headerMap, cdnKey) {
+  const result = {
+    status: 'Unknown',
+    statusCode: null,
+    isHit: null,
+    confidence: 'none',
+    detectionMethod: null,
+    rawValue: null,
+    alternativeHeaders: []
+  };
+  
+  logMessage(`Parsing cache status for ${cdnKey}`, 'debug');
+  
+  // 特殊處理 AspirappsCDN
+  if (cdnKey === 'aspirappscdn' && config.customParser) {
+    const viaHeader = headerMap['via'];
+    if (viaHeader) {
+      const cacheAnalysis = parseAspirappsCDNCacheStatus(viaHeader);
+      result.status = cacheAnalysis.status;
+      result.statusCode = cacheAnalysis.statusCode;
+      result.isHit = cacheAnalysis.isHit;
+      result.confidence = 'high';
+      result.detectionMethod = 'custom_via_parser';
+      result.rawValue = viaHeader;
+      logMessage(`AspirappsCDN cache status: ${result.status} (isHit: ${result.isHit})`, 'debug');
+    }
+    return result;
+  }
+  
+  // 標準快取狀態解析 - 支援多個 header 檢測
+  const possibleHeaders = [
+    config.cacheStatusHeader,
+    'x-cache',
+    'x-cache-status', 
+    'cache-status',
+    'cf-cache-status',
+    'x-goog-cache-status'
+  ].filter(h => h); // 移除空值
+  
+  let bestMatch = null;
+  let bestConfidence = 'none';
+  
+  for (const headerName of possibleHeaders) {
+    const headerValue = headerMap[headerName.toLowerCase()];
+    if (!headerValue) continue;
+    
+    logMessage(`Checking header ${headerName}: ${headerValue}`, 'debug');
+    
+    const normalizedStatus = headerValue.toLowerCase().trim();
+    const currentMatch = {
+      status: headerValue,
+      statusCode: null,
+      isHit: null,
+      confidence: headerName === config.cacheStatusHeader ? 'high' : 'medium',
+      detectionMethod: `header_${headerName}`,
+      rawValue: headerValue
+    };
+    
+    // 檢查映射表
+    let foundMapping = false;
+    for (const [pattern, mappedStatus] of Object.entries(config.cacheStatusMapping)) {
+      const normalizedPattern = pattern.toLowerCase();
+      
+      // 支援精確匹配和包含匹配
+      const isExactMatch = normalizedStatus === normalizedPattern;
+      const isContainMatch = normalizedStatus.includes(normalizedPattern);
+      
+      if (isExactMatch || isContainMatch) {
+        currentMatch.statusCode = pattern;
+        currentMatch.confidence = isExactMatch ? 'high' : 'medium';
+        
+        switch (mappedStatus) {
+          case 'HIT':
+            currentMatch.isHit = true;
+            break;
+          case 'MISS':
+            currentMatch.isHit = false;
+            break;
+          case 'OTHER':
+            currentMatch.isHit = null;
+            break;
+        }
+        
+        foundMapping = true;
+        logMessage(`Found mapping: ${pattern} -> ${mappedStatus} (exact: ${isExactMatch})`, 'debug');
+        break;
+      }
+    }
+    
+    // 如果沒有找到映射，嘗試通用模式
+    if (!foundMapping) {
+      const genericMatch = parseGenericCacheStatus(normalizedStatus);
+      if (genericMatch.isHit !== null) {
+        currentMatch.statusCode = genericMatch.pattern;
+        currentMatch.isHit = genericMatch.isHit;
+        currentMatch.confidence = 'low';
+        currentMatch.detectionMethod += '_generic';
+        foundMapping = true;
+        logMessage(`Generic pattern match: ${genericMatch.pattern} -> ${genericMatch.isHit ? 'HIT' : 'MISS'}`, 'debug');
+      }
+    }
+    
+    // 選擇最佳匹配（優先級：high > medium > low）
+    if (foundMapping && (bestConfidence === 'none' || 
+        (currentMatch.confidence === 'high' && bestConfidence !== 'high') ||
+        (currentMatch.confidence === 'medium' && bestConfidence === 'low'))) {
+      bestMatch = currentMatch;
+      bestConfidence = currentMatch.confidence;
+    }
+    
+    // 記錄替代 headers
+    if (headerName !== config.cacheStatusHeader && foundMapping) {
+      result.alternativeHeaders.push({
+        header: headerName,
+        value: headerValue,
+        parsed: currentMatch
+      });
+    }
+  }
+  
+  // 應用最佳匹配
+  if (bestMatch) {
+    Object.assign(result, bestMatch);
+    logMessage(`Best cache status match: ${result.status} (isHit: ${result.isHit}, confidence: ${result.confidence})`, 'debug');
+  } else {
+    logMessage(`No cache status mapping found for ${cdnKey}`, 'debug');
+  }
+  
+  return result;
+}
+
+// 通用快取狀態模式解析
+function parseGenericCacheStatus(normalizedStatus) {
+  const result = {
+    pattern: null,
+    isHit: null
+  };
+  
+  // 常見的 HIT 模式
+  const hitPatterns = [
+    'hit', 'cache_hit', 'cached', 'from_cache', 'tcp_hit', 
+    'refresh_hit', 'refreshhit', 'revalidated'
+  ];
+  
+  // 常見的 MISS 模式  
+  const missPatterns = [
+    'miss', 'cache_miss', 'not_cached', 'tcp_miss', 
+    'expired', 'stale', 'refresh_miss'
+  ];
+  
+  // 檢查 HIT 模式
+  for (const pattern of hitPatterns) {
+    if (normalizedStatus.includes(pattern)) {
+      result.pattern = pattern;
+      result.isHit = true;
+      return result;
+    }
+  }
+  
+  // 檢查 MISS 模式
+  for (const pattern of missPatterns) {
+    if (normalizedStatus.includes(pattern)) {
+      result.pattern = pattern;
+      result.isHit = false;
+      return result;
+    }
+  }
+  
+  return result;
 }
 
 // 新增：解析 AspirappsCDN Via Header 快取狀態
@@ -235,6 +830,31 @@ function parseAspirappsCDNCacheStatus(viaHeaderValue) {
   return result;
 }
 
+// 初始化 CDN 配置系統
+function initializeCDNConfigs() {
+  logMessage('Initializing CDN detection configuration system...', 'info');
+  
+  // 驗證所有配置
+  const validationResults = CDN_CONFIG_VALIDATOR.validateAllConfigs(CDN_CONFIGS);
+  let hasErrors = false;
+  
+  for (const [cdnKey, result] of Object.entries(validationResults)) {
+    if (!result.valid) {
+      logMessage(`CDN config validation failed for ${cdnKey}: ${result.errors.join(', ')}`, 'error');
+      hasErrors = true;
+    }
+  }
+  
+  if (!hasErrors) {
+    const stats = CDN_CONFIG_VALIDATOR.getConfigStats();
+    logMessage(`CDN configurations initialized successfully. Stats: ${JSON.stringify(stats)}`, 'info');
+  } else {
+    logMessage('CDN configuration system initialized with errors. Some CDN detection may not work properly.', 'warn');
+  }
+  
+  return !hasErrors;
+}
+
 // 初始化監聽狀態 - 預設啟用
 chrome.storage.local.get('cdnDetectionEnabled', (result) => {
   if (chrome.runtime.lastError) {
@@ -257,6 +877,9 @@ chrome.storage.local.get('cdnDetectionEnabled', (result) => {
   
   logMessage(`CDN Detection initialized: ${cdnDetectionEnabled ? 'Enabled' : 'Disabled'}`);
   
+  // 初始化 CDN 配置系統
+  initializeCDNConfigs();
+  
   if (cdnDetectionEnabled) {
     startListening();
   }
@@ -273,6 +896,69 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     logMessage(`Tab updated: ${tabId} - ${tab.url}`, 'debug');
   }
 });
+
+// 新增：計算 CDN 存取速度
+function calculateCDNAccessSpeed(stats) {
+  const speedStats = {
+    overallSpeed: 0,
+    hitSpeed: 0,
+    missSpeed: 0,
+    avgResponseTime: 0
+  };
+  
+  try {
+    // 確保所有數值都是數字且非負
+    const hitSize = Math.max(0, parseFloat(stats.hitTotalSize) || 0);
+    const missSize = Math.max(0, parseFloat(stats.missTotalSize) || 0);
+    const unknownSize = Math.max(0, parseFloat(stats.unknownTotalSize) || 0);
+    const hitTime = Math.max(0, parseFloat(stats.hitTotalTime) || 0);
+    const missTime = Math.max(0, parseFloat(stats.missTotalTime) || 0);
+    const unknownTime = Math.max(0, parseFloat(stats.unknownTotalTime) || 0);
+    
+    // 計算總體 CDN 速度 (MB/s)
+    const totalCDNSize = hitSize + missSize + unknownSize;
+    const totalCDNTime = hitTime + missTime + unknownTime;
+    
+    logMessage(`Speed calculation raw data: hitSize=${hitSize}, hitTime=${hitTime}, missSize=${missSize}, missTime=${missTime}, unknownSize=${unknownSize}, unknownTime=${unknownTime}`, 'info');
+    logMessage(`Speed calculation totals: totalSize=${totalCDNSize} bytes, totalTime=${totalCDNTime} ms`, 'info');
+    
+    if (totalCDNSize > 0 && totalCDNTime > 0) {
+      // 轉換為 MB/s: (bytes / milliseconds) * 1000 / (1024 * 1024)
+      const bytesPerSecond = (totalCDNSize / totalCDNTime) * 1000;
+      speedStats.overallSpeed = bytesPerSecond / (1024 * 1024);
+      logMessage(`Overall speed calculation: ${totalCDNSize} bytes / ${totalCDNTime} ms * 1000 = ${bytesPerSecond} bytes/s = ${speedStats.overallSpeed.toFixed(4)} MB/s`, 'info');
+    }
+    
+    // 計算 HIT 速度
+    if (hitSize > 0 && hitTime > 0) {
+      const hitBytesPerSecond = (hitSize / hitTime) * 1000;
+      speedStats.hitSpeed = hitBytesPerSecond / (1024 * 1024);
+      logMessage(`HIT speed calculation: ${hitSize} bytes / ${hitTime} ms * 1000 = ${hitBytesPerSecond} bytes/s = ${speedStats.hitSpeed.toFixed(4)} MB/s`, 'info');
+    }
+    
+    // 計算 MISS 速度
+    if (missSize > 0 && missTime > 0) {
+      const missBytesPerSecond = (missSize / missTime) * 1000;
+      speedStats.missSpeed = missBytesPerSecond / (1024 * 1024);
+      logMessage(`MISS speed calculation: ${missSize} bytes / ${missTime} ms * 1000 = ${missBytesPerSecond} bytes/s = ${speedStats.missSpeed.toFixed(4)} MB/s`, 'info');
+    }
+    
+    // 計算平均響應時間
+    const totalCDNRequests = (stats.hitCount || 0) + (stats.missCount || 0) + (stats.unknownCacheCount || 0);
+    if (totalCDNRequests > 0 && totalCDNTime > 0) {
+      speedStats.avgResponseTime = totalCDNTime / totalCDNRequests;
+      logMessage(`Average response time: ${totalCDNTime} ms / ${totalCDNRequests} requests = ${speedStats.avgResponseTime.toFixed(2)} ms`, 'info');
+    }
+    
+    logMessage(`Final CDN Speed results: Overall=${speedStats.overallSpeed.toFixed(4)} MB/s, HIT=${speedStats.hitSpeed.toFixed(4)} MB/s, MISS=${speedStats.missSpeed.toFixed(4)} MB/s, AvgTime=${speedStats.avgResponseTime.toFixed(2)} ms`, 'info');
+    
+  } catch (error) {
+    logMessage(`Error calculating CDN access speed: ${error.message}`, 'error');
+    console.error('Speed calculation error:', error, stats);
+  }
+  
+  return speedStats;
+}
 
 // 新增：獲取當前標籤頁資訊
 function getCurrentTabInfo(callback) {
@@ -355,45 +1041,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // 保持 sendResponse 活躍
   }
   
-  // 新增：處理獲取日誌的請求
+  // 新增：處理獲取當前分頁日誌的請求
   if (message.type === 'getDetectionLog') {
-    chrome.storage.local.get(['detectionLog'], (result) => {
-      if (chrome.runtime.lastError) {
-        console.error('Failed to get detection log:', chrome.runtime.lastError);
+    getCurrentTabInfo((tab) => {
+      if (tab && tabDetectionData[tab.id]) {
         sendResponse({
           type: 'detectionLogResponse',
-          error: chrome.runtime.lastError.message,
+          data: tabDetectionData[tab.id].detectionLog || []
+        });
+      } else {
+        sendResponse({
+          type: 'detectionLogResponse',
+          error: 'No tab data found',
           data: []
         });
-        return;
       }
-      
-      sendResponse({
-        type: 'detectionLogResponse',
-        data: result.detectionLog || []
-      });
     });
     return true; // 保持 sendResponse 活躍
   }
   
-  // 新增：處理清除日誌的請求
+  // 新增：處理清除當前分頁日誌的請求
   if (message.type === 'clearDetectionLog') {
-    chrome.storage.local.remove(['detectionLog', 'debugLogs'], () => {
-      logMessage('Detection log cleared');
-      // 重置統計
-      chrome.storage.local.set({ 
-        cdnStats: { 
-      cdnCount: 0, 
-      nonCdnCount: 0, 
-      totalRequests: 0, 
-      hitCount: 0,
-      missCount: 0,
-      unknownCacheCount: 0,
-      hitTotalSize: 0,
-      missTotalSize: 0,
-      unknownTotalSize: 0,
-      lastUpdated: new Date().toISOString() 
-    }
+    getCurrentTabInfo((tab) => {
+      if (tab && tabDetectionData[tab.id]) {
+        logMessage(`Clearing detection log for tab ${tab.id}`);
+        // 重置當前分頁的檢測資料
+        tabDetectionData[tab.id] = {
+          tabId: tab.id,
+          url: tab.url,
+          title: tab.title,
+          detectionLog: [],
+          cdnStats: { 
+            cdnCount: 0, 
+            nonCdnCount: 0, 
+            totalRequests: 0, 
+            hitCount: 0,
+            missCount: 0,
+            unknownCacheCount: 0,
+            hitTotalSize: 0,
+            missTotalSize: 0,
+            unknownTotalSize: 0,
+            hitTotalTime: 0,
+            missTotalTime: 0,
+            unknownTotalTime: 0,
+            lastUpdated: new Date().toISOString() 
+          }
+        };
+        logMessage(`Tab ${tab.id} detection data reset`);
+      }
+      
+      // 清除除錯日誌
+      chrome.storage.local.remove(['debugLogs'], () => {
+        logMessage('Debug logs cleared');
       });
     });
   }
@@ -461,10 +1160,24 @@ function startListening() {
         const contentLengthHeader = headers.find(header => header.name.toLowerCase() === 'content-length');
         const contentLength = contentLengthHeader ? parseInt(contentLengthHeader.value, 10) : null;
         
+        // 新增：除錯日誌
+        if (contentLength) {
+          logMessage(`Content-Length: ${contentLength} bytes for ${url.substring(0, 50)}...`, 'debug');
+        } else {
+          logMessage(`No Content-Length header for ${url.substring(0, 50)}...`, 'debug');
+        }
+        
         // 新增：計算響應時間
         const requestKey = `${details.requestId}_${details.tabId}`;
         const startTime = requestStartTimes[requestKey];
         const responseTime = startTime ? Date.now() - startTime : null;
+        
+        // 新增：除錯日誌
+        if (responseTime) {
+          logMessage(`Response time calculated: ${responseTime}ms for ${url.substring(0, 50)}...`, 'debug');
+        } else {
+          logMessage(`No start time found for request ${requestKey}`, 'debug');
+        }
         
         // 清理已完成的請求時間記錄
         if (requestStartTimes[requestKey]) {
@@ -482,6 +1195,9 @@ function startListening() {
           headers: cdnDetection.cacheHeaders,
           isCDN: cdnDetection.isCDN,
           cdnType: cdnDetection.cdnType,
+          cdnTypes: cdnDetection.cdnTypes, // 新增：多 CDN 支援
+          confidence: cdnDetection.confidence, // 新增：檢測信心度
+          detectionResults: cdnDetection.detectionResults, // 新增：詳細檢測結果
           viaHeader: cdnDetection.viaHeader,
           serverHeader: cdnDetection.serverHeader,
           detectionReason: cdnDetection.detectionReason,
@@ -507,18 +1223,21 @@ function startListening() {
             url: '',
             title: '',
             detectionLog: [],
-                    cdnStats: { 
-          cdnCount: 0, 
-          nonCdnCount: 0, 
-          totalRequests: 0,
-          hitCount: 0,
-          missCount: 0,
-          unknownCacheCount: 0,
-          hitTotalSize: 0,
-          missTotalSize: 0,
-          unknownTotalSize: 0,
-          lastUpdated: timestamp 
-        }
+            cdnStats: { 
+              cdnCount: 0, 
+              nonCdnCount: 0, 
+              totalRequests: 0,
+              hitCount: 0,
+              missCount: 0,
+              unknownCacheCount: 0,
+              hitTotalSize: 0,
+              missTotalSize: 0,
+              unknownTotalSize: 0,
+              hitTotalTime: 0,
+              missTotalTime: 0,
+              unknownTotalTime: 0,
+              lastUpdated: timestamp 
+            }
           };
         }
         
@@ -543,23 +1262,124 @@ function startListening() {
         if (cdnDetection.isCDN) {
           tabData.cdnStats.cdnCount++;
           
-          // 新增：更新快取狀態統計
+          // 新增：多 CDN 統計支援
+          if (!tabData.cdnStats.cdnBreakdown) {
+            tabData.cdnStats.cdnBreakdown = {};
+          }
+          
+          // 統計主要 CDN
+          const primaryCDN = cdnDetection.cdnType;
+          if (!tabData.cdnStats.cdnBreakdown[primaryCDN]) {
+            tabData.cdnStats.cdnBreakdown[primaryCDN] = {
+              count: 0,
+              hitCount: 0,
+              missCount: 0,
+              unknownCount: 0,
+              totalSize: 0,
+              hitSize: 0,
+              missSize: 0,
+              unknownSize: 0,
+              totalTime: 0,
+              hitTime: 0,
+              missTime: 0,
+              unknownTime: 0
+            };
+          }
+          tabData.cdnStats.cdnBreakdown[primaryCDN].count++;
+          
+          // 統計所有檢測到的 CDN（多 CDN 疊加情況）
+          cdnDetection.cdnTypes.forEach(cdnInfo => {
+            const cdnName = cdnInfo.name;
+            if (!tabData.cdnStats.cdnBreakdown[cdnName]) {
+              tabData.cdnStats.cdnBreakdown[cdnName] = {
+                count: 0,
+                hitCount: 0,
+                missCount: 0,
+                unknownCount: 0,
+                totalSize: 0,
+                hitSize: 0,
+                missSize: 0,
+                unknownSize: 0,
+                totalTime: 0,
+                hitTime: 0,
+                missTime: 0,
+                unknownTime: 0
+              };
+            }
+            
+            // 只統計主要 CDN 的詳細資料，避免重複計算
+            if (cdnName === primaryCDN) {
+              const cdnStats = tabData.cdnStats.cdnBreakdown[cdnName];
+              
+              if (contentLength) {
+                cdnStats.totalSize += contentLength;
+              }
+              if (responseTime) {
+                cdnStats.totalTime += responseTime;
+              }
+              
+              // 更新快取狀態統計
+              if (cdnDetection.isHit === true) {
+                cdnStats.hitCount++;
+                if (contentLength) {
+                  cdnStats.hitSize += contentLength;
+                }
+                if (responseTime) {
+                  cdnStats.hitTime += responseTime;
+                }
+              } else if (cdnDetection.isHit === false) {
+                cdnStats.missCount++;
+                if (contentLength) {
+                  cdnStats.missSize += contentLength;
+                }
+                if (responseTime) {
+                  cdnStats.missTime += responseTime;
+                }
+              } else {
+                cdnStats.unknownCount++;
+                if (contentLength) {
+                  cdnStats.unknownSize += contentLength;
+                }
+                if (responseTime) {
+                  cdnStats.unknownTime += responseTime;
+                }
+              }
+            }
+          });
+          
+          // 保持原有的全域統計（向後相容）
           if (cdnDetection.isHit === true) {
             tabData.cdnStats.hitCount++;
             if (contentLength) {
               tabData.cdnStats.hitTotalSize += contentLength;
+              logMessage(`HIT size accumulated: +${contentLength} bytes, total: ${tabData.cdnStats.hitTotalSize} bytes`, 'info');
+            }
+            if (responseTime) {
+              tabData.cdnStats.hitTotalTime = (tabData.cdnStats.hitTotalTime || 0) + responseTime;
+              logMessage(`HIT time accumulated: +${responseTime}ms, total: ${tabData.cdnStats.hitTotalTime}ms`, 'info');
             }
           } else if (cdnDetection.isHit === false) {
             tabData.cdnStats.missCount++;
             if (contentLength) {
               tabData.cdnStats.missTotalSize += contentLength;
+              logMessage(`MISS size accumulated: +${contentLength} bytes, total: ${tabData.cdnStats.missTotalSize} bytes`, 'info');
+            }
+            if (responseTime) {
+              tabData.cdnStats.missTotalTime = (tabData.cdnStats.missTotalTime || 0) + responseTime;
+              logMessage(`MISS time accumulated: +${responseTime}ms, total: ${tabData.cdnStats.missTotalTime}ms`, 'info');
             }
           } else {
             tabData.cdnStats.unknownCacheCount++;
             if (contentLength) {
               tabData.cdnStats.unknownTotalSize += contentLength;
             }
+            if (responseTime) {
+              tabData.cdnStats.unknownTotalTime = (tabData.cdnStats.unknownTotalTime || 0) + responseTime;
+            }
           }
+          
+          // 新增：計算 CDN 存取速度
+          tabData.cdnStats.cdnAccessSpeed = calculateCDNAccessSpeed(tabData.cdnStats);
         } else {
           tabData.cdnStats.nonCdnCount++;
         }
@@ -581,12 +1401,14 @@ function startListening() {
 
         // 更新圖標狀態（基於當前標籤頁的 CDN 檢測結果）
         if (cdnDetection.isCDN) {
-          chrome.action.setIcon({ path: 'icon-green.png' });
+          // 暫時註解圖標設定避免錯誤
+          // chrome.action.setIcon({ path: 'icon-green.png' });
           logMessage(`CDN count updated for tab ${tabId}: ${tabData.cdnStats.cdnCount}/${tabData.cdnStats.totalRequests} (${((tabData.cdnStats.cdnCount/tabData.cdnStats.totalRequests)*100).toFixed(1)}%)`, 'info');
         } else {
           // 只有在該標籤頁沒有檢測到任何 CDN 時才顯示紅色圖標
           if (tabData.cdnStats.cdnCount === 0) {
-            chrome.action.setIcon({ path: 'icon-red.png' });
+            // 暫時註解圖標設定避免錯誤
+            // chrome.action.setIcon({ path: 'icon-red.png' });
           }
         }
         
@@ -601,6 +1423,9 @@ function startListening() {
             hitTotalSize: 0,
             missTotalSize: 0,
             unknownTotalSize: 0,
+            hitTotalTime: 0,
+            missTotalTime: 0,
+            unknownTotalTime: 0,
             lastUpdated: timestamp,
             totalRequests: 0
           };
@@ -611,23 +1436,119 @@ function startListening() {
           if (cdnDetection.isCDN) {
             stats.cdnCount++;
             
-            // 新增：更新全域快取狀態統計
+            // 新增：多 CDN 全域統計支援
+            if (!stats.cdnBreakdown) {
+              stats.cdnBreakdown = {};
+            }
+            
+            // 統計主要 CDN
+            const primaryCDN = cdnDetection.cdnType;
+            if (!stats.cdnBreakdown[primaryCDN]) {
+              stats.cdnBreakdown[primaryCDN] = {
+                count: 0,
+                hitCount: 0,
+                missCount: 0,
+                unknownCount: 0,
+                totalSize: 0,
+                hitSize: 0,
+                missSize: 0,
+                unknownSize: 0,
+                totalTime: 0,
+                hitTime: 0,
+                missTime: 0,
+                unknownTime: 0
+              };
+            }
+            stats.cdnBreakdown[primaryCDN].count++;
+            
+            // 統計所有檢測到的 CDN
+            cdnDetection.cdnTypes.forEach(cdnInfo => {
+              const cdnName = cdnInfo.name;
+              if (!stats.cdnBreakdown[cdnName]) {
+                stats.cdnBreakdown[cdnName] = {
+                  count: 0,
+                  hitCount: 0,
+                  missCount: 0,
+                  unknownCount: 0,
+                  totalSize: 0,
+                  hitSize: 0,
+                  missSize: 0,
+                  unknownSize: 0,
+                  totalTime: 0,
+                  hitTime: 0,
+                  missTime: 0,
+                  unknownTime: 0
+                };
+              }
+              
+              // 只統計主要 CDN 的詳細資料
+              if (cdnName === primaryCDN) {
+                const cdnStats = stats.cdnBreakdown[cdnName];
+                
+                if (contentLength) {
+                  cdnStats.totalSize += contentLength;
+                }
+                if (responseTime) {
+                  cdnStats.totalTime += responseTime;
+                }
+                
+                if (cdnDetection.isHit === true) {
+                  cdnStats.hitCount++;
+                  if (contentLength) {
+                    cdnStats.hitSize += contentLength;
+                  }
+                  if (responseTime) {
+                    cdnStats.hitTime += responseTime;
+                  }
+                } else if (cdnDetection.isHit === false) {
+                  cdnStats.missCount++;
+                  if (contentLength) {
+                    cdnStats.missSize += contentLength;
+                  }
+                  if (responseTime) {
+                    cdnStats.missTime += responseTime;
+                  }
+                } else {
+                  cdnStats.unknownCount++;
+                  if (contentLength) {
+                    cdnStats.unknownSize += contentLength;
+                  }
+                  if (responseTime) {
+                    cdnStats.unknownTime += responseTime;
+                  }
+                }
+              }
+            });
+            
+            // 保持原有的全域統計（向後相容）
             if (cdnDetection.isHit === true) {
               stats.hitCount++;
               if (contentLength) {
                 stats.hitTotalSize += contentLength;
+              }
+              if (responseTime) {
+                stats.hitTotalTime += responseTime;
               }
             } else if (cdnDetection.isHit === false) {
               stats.missCount++;
               if (contentLength) {
                 stats.missTotalSize += contentLength;
               }
+              if (responseTime) {
+                stats.missTotalTime += responseTime;
+              }
             } else {
               stats.unknownCacheCount++;
               if (contentLength) {
                 stats.unknownTotalSize += contentLength;
               }
+              if (responseTime) {
+                stats.unknownTotalTime += responseTime;
+              }
             }
+            
+            // 新增：計算全域 CDN 存取速度
+            stats.cdnAccessSpeed = calculateCDNAccessSpeed(stats);
           } else {
             stats.nonCdnCount++;
           }
@@ -668,21 +1589,42 @@ function stopListening() {
   logMessage('CDN detection listener stopped');
 }
 
-// 新增：定期清理舊日誌（每小時執行一次）
+// 新增：定期清理舊日誌和過期的分頁資料（每小時執行一次）
 setInterval(() => {
-  chrome.storage.local.get(['detectionLog', 'debugLogs'], (result) => {
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    
-    // 清理超過 24 小時的檢測日誌
-    if (result.detectionLog) {
-      const filteredLog = result.detectionLog.filter(entry => 
-        new Date(entry.timestamp) > oneDayAgo
-      );
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const currentTime = Date.now();
+  const maxAge = 30 * 60 * 1000; // 30分鐘
+  
+  // 清理超過 24 小時的除錯日誌
+  chrome.storage.local.get(['debugLogs'], (result) => {
+    if (result.debugLogs) {
+      const filteredLogs = result.debugLogs.filter(entry => {
+        const logTime = entry.match(/\[(.*?)\]/);
+        return logTime && new Date(logTime[1]) > oneDayAgo;
+      });
       
-      if (filteredLog.length !== result.detectionLog.length) {
-        chrome.storage.local.set({ detectionLog: filteredLog });
-        logMessage(`Cleaned up old detection logs. Kept ${filteredLog.length} recent entries.`);
+      if (filteredLogs.length !== result.debugLogs.length) {
+        chrome.storage.local.set({ debugLogs: filteredLogs });
+        logMessage(`Cleaned up old debug logs. Kept ${filteredLogs.length} recent entries.`);
+      }
+    }
+  });
+  
+  // 清理過期的分頁資料
+  Object.keys(tabDetectionData).forEach(tabId => {
+    const tabData = tabDetectionData[tabId];
+    if (tabData.cdnStats.lastUpdated) {
+      const lastUpdated = new Date(tabData.cdnStats.lastUpdated).getTime();
+      if (currentTime - lastUpdated > maxAge) {
+        // 檢查分頁是否還存在
+        chrome.tabs.get(parseInt(tabId), (tab) => {
+          if (chrome.runtime.lastError) {
+            // 分頁不存在，清理資料
+            logMessage(`Cleaning up expired data for tab ${tabId}`, 'info');
+            delete tabDetectionData[tabId];
+          }
+        });
       }
     }
   });

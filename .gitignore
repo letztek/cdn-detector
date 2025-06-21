@@ -15,6 +15,7 @@ node_modules/
 # Editor directories and files
 .idea
 .vscode
+.cursor/
 *.suo
 *.ntvs*
 *.njsproj
@@ -24,6 +25,15 @@ node_modules/
 # OS specific
 .DS_Store
 
+# Task Master and project management
+.taskmaster/
+.roo/
+.roomodes
+
 # Task files
 tasks.json
-tasks/ 
+tasks/
+
+# CDN reference files
+*CDN*.txt
+*.zip 
