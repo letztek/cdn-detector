@@ -979,123 +979,249 @@ function getCurrentTabInfo(callback) {
   });
 }
 
-// 監聽開關狀態變化
+// 統一的消息處理器
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // 新增：健康檢查
-  if (message.type === 'ping') {
-    sendResponse({ type: 'pong', status: 'ok' });
-    return;
-  }
-  
-  if (message.type === 'toggleDetection') {
-    cdnDetectionEnabled = message.enabled;
-    chrome.storage.local.set({ cdnDetectionEnabled }, () => {
-      if (chrome.runtime.lastError) {
-        console.error('Failed to save detection state:', chrome.runtime.lastError);
-        return;
-      }
-    });
+  try {
+    const tabId = sender.tab ? sender.tab.id : null;
     
-    logMessage(`CDN Detection toggled: ${cdnDetectionEnabled ? 'Enabled' : 'Disabled'}`);
-
-    if (cdnDetectionEnabled) {
-      startListening();
-    } else {
-      stopListening();
+    // CDN 檢測相關消息
+    if (message.type === 'ping') {
+      sendResponse({ type: 'pong', status: 'ok' });
+      return;
     }
-  }
-  
-  // 新增：處理獲取當前標籤頁檢測結果的請求
-  if (message.type === 'getCurrentTabDetection') {
-    getCurrentTabInfo((tab) => {
-      if (tab) {
-        const tabData = tabDetectionData[tab.id] || {
-          tabId: tab.id,
-          url: tab.url,
-          title: tab.title,
-          detectionLog: [],
-          cdnStats: { 
-        cdnCount: 0, 
-        nonCdnCount: 0, 
-        totalRequests: 0,
-        hitCount: 0,
-        missCount: 0,
-        unknownCacheCount: 0,
-        hitTotalSize: 0,
-        missTotalSize: 0,
-        unknownTotalSize: 0
-      }
-        };
-        sendResponse({
-          type: 'currentTabDetectionResponse',
-          data: tabData
-        });
-      } else {
-        sendResponse({
-          type: 'currentTabDetectionResponse',
-          error: 'No active tab found',
-          data: null
-        });
-      }
-    });
-    return true; // 保持 sendResponse 活躍
-  }
-  
-  // 新增：處理獲取當前分頁日誌的請求
-  if (message.type === 'getDetectionLog') {
-    getCurrentTabInfo((tab) => {
-      if (tab && tabDetectionData[tab.id]) {
-        sendResponse({
-          type: 'detectionLogResponse',
-          data: tabDetectionData[tab.id].detectionLog || []
-        });
-      } else {
-        sendResponse({
-          type: 'detectionLogResponse',
-          error: 'No tab data found',
-          data: []
-        });
-      }
-    });
-    return true; // 保持 sendResponse 活躍
-  }
-  
-  // 新增：處理清除當前分頁日誌的請求
-  if (message.type === 'clearDetectionLog') {
-    getCurrentTabInfo((tab) => {
-      if (tab && tabDetectionData[tab.id]) {
-        logMessage(`Clearing detection log for tab ${tab.id}`);
-        // 重置當前分頁的檢測資料
-        tabDetectionData[tab.id] = {
-          tabId: tab.id,
-          url: tab.url,
-          title: tab.title,
-          detectionLog: [],
-          cdnStats: { 
-            cdnCount: 0, 
-            nonCdnCount: 0, 
-            totalRequests: 0, 
-            hitCount: 0,
-            missCount: 0,
-            unknownCacheCount: 0,
-            hitTotalSize: 0,
-            missTotalSize: 0,
-            unknownTotalSize: 0,
-            hitTotalTime: 0,
-            missTotalTime: 0,
-            unknownTotalTime: 0,
-            lastUpdated: new Date().toISOString() 
-          }
-        };
-        logMessage(`Tab ${tab.id} detection data reset`);
-      }
-      
-      // 清除除錯日誌
-      chrome.storage.local.remove(['debugLogs'], () => {
-        logMessage('Debug logs cleared');
+    
+    if (message.type === 'toggleDetection') {
+      cdnDetectionEnabled = message.enabled;
+      chrome.storage.local.set({ cdnDetectionEnabled }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('Failed to save detection state:', chrome.runtime.lastError);
+          return;
+        }
       });
-    });
+      
+      logMessage(`CDN Detection toggled: ${cdnDetectionEnabled ? 'Enabled' : 'Disabled'}`);
+
+      if (cdnDetectionEnabled) {
+        startListening();
+      } else {
+        stopListening();
+      }
+      sendResponse({ success: true });
+      return;
+    }
+    
+    if (message.type === 'getCurrentTabDetection') {
+      getCurrentTabInfo((tab) => {
+        if (tab) {
+          const tabData = tabDetectionData[tab.id] || {
+            tabId: tab.id,
+            url: tab.url,
+            title: tab.title,
+            detectionLog: [],
+            cdnStats: { 
+              cdnCount: 0, 
+              nonCdnCount: 0, 
+              totalRequests: 0,
+              hitCount: 0,
+              missCount: 0,
+              unknownCacheCount: 0,
+              hitTotalSize: 0,
+              missTotalSize: 0,
+              unknownTotalSize: 0
+            }
+          };
+          sendResponse({
+            type: 'currentTabDetectionResponse',
+            data: tabData
+          });
+        } else {
+          sendResponse({
+            type: 'currentTabDetectionResponse',
+            error: 'No active tab found',
+            data: null
+          });
+        }
+      });
+      return true; // 保持 sendResponse 活躍
+    }
+    
+    if (message.type === 'getDetectionLog') {
+      getCurrentTabInfo((tab) => {
+        if (tab && tabDetectionData[tab.id]) {
+          sendResponse({
+            type: 'detectionLogResponse',
+            data: tabDetectionData[tab.id].detectionLog || []
+          });
+        } else {
+          sendResponse({
+            type: 'detectionLogResponse',
+            error: 'No tab data found',
+            data: []
+          });
+        }
+      });
+      return true; // 保持 sendResponse 活躍
+    }
+    
+    if (message.type === 'clearDetectionLog') {
+      getCurrentTabInfo((tab) => {
+        if (tab && tabDetectionData[tab.id]) {
+          logMessage(`Clearing detection log for tab ${tab.id}`);
+          tabDetectionData[tab.id] = {
+            tabId: tab.id,
+            url: tab.url,
+            title: tab.title,
+            detectionLog: [],
+            cdnStats: { 
+              cdnCount: 0, 
+              nonCdnCount: 0, 
+              totalRequests: 0, 
+              hitCount: 0,
+              missCount: 0,
+              unknownCacheCount: 0,
+              hitTotalSize: 0,
+              missTotalSize: 0,
+              unknownTotalSize: 0,
+              hitTotalTime: 0,
+              missTotalTime: 0,
+              unknownTotalTime: 0,
+              lastUpdated: new Date().toISOString() 
+            }
+          };
+          logMessage(`Tab ${tab.id} detection data reset`);
+        }
+        
+        chrome.storage.local.remove(['debugLogs'], () => {
+          logMessage('Debug logs cleared');
+        });
+      });
+      sendResponse({ success: true });
+      return;
+    }
+    
+    // 視頻品質監控相關消息
+    switch (message.type) {
+      case 'VIDEO_QUALITY_UPDATE':
+        if (tabId && message.data) {
+          handleVideoQualityUpdate(tabId, message.data);
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'Invalid data or missing tab ID' });
+        }
+        break;
+        
+      case 'VIDEO_QUALITY_LOG':
+        if (tabId && message.data) {
+          handleVideoQualityLog(tabId, message.data);
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'Invalid log data or missing tab ID' });
+        }
+        break;
+        
+      case 'GET_VIDEO_QUALITY_DATA':
+        const requestedTabId = message.tabId || tabId;
+        
+        if (requestedTabId) {
+          const data = videoQualityData.tabs[requestedTabId] || null;
+          const responseData = { 
+            currentTab: data, 
+            activeTabId: requestedTabId,
+            timestamp: Date.now()
+          };
+          
+          logMessage(`Returning video quality data for tab ${requestedTabId}: ${data ? 'has data' : 'no data'}`, 'debug');
+          sendResponse({ success: true, data: responseData });
+          
+        } else {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const activeTabId = tabs[0]?.id;
+            
+            if (activeTabId) {
+              const data = videoQualityData.tabs[activeTabId] || null;
+              const responseData = {
+                global: videoQualityData.global,
+                currentTab: data,
+                tabIds: Object.keys(videoQualityData.tabs),
+                activeTabId: activeTabId,
+                timestamp: Date.now()
+              };
+              
+              logMessage(`Returning video quality data for active tab ${activeTabId}: ${data ? 'has data' : 'no data'}`, 'debug');
+              sendResponse({ success: true, data: responseData });
+              
+            } else {
+              logMessage('No active tab found for video quality request', 'warn');
+              sendResponse({ 
+                success: false, 
+                error: 'No active tab found',
+                data: {
+                  global: videoQualityData.global,
+                  currentTab: null,
+                  tabIds: Object.keys(videoQualityData.tabs),
+                  activeTabId: null,
+                  timestamp: Date.now()
+                }
+              });
+            }
+          });
+          
+          return true; // 保持消息通道開放
+        }
+        break;
+        
+      case 'CLEAR_VIDEO_QUALITY_DATA':
+        const clearTabId = message.tabId || tabId;
+        if (clearTabId && videoQualityData.tabs[clearTabId]) {
+          delete videoQualityData.tabs[clearTabId];
+          updateGlobalVideoQualityStats();
+          saveVideoQualityData();
+          logMessage(`Cleared video quality data for tab ${clearTabId}`, 'info');
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'Invalid tab ID or no data to clear' });
+        }
+        break;
+        
+      case 'GET_VIDEO_QUALITY_STATS':
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const activeTabId = tabs[0]?.id;
+          const stats = {
+            global: videoQualityData.global,
+            currentTab: activeTabId ? videoQualityData.tabs[activeTabId] : null,
+            totalTabs: Object.keys(videoQualityData.tabs).length,
+            activeTabId: activeTabId,
+            timestamp: Date.now()
+          };
+          
+          logMessage(`Returning video quality stats: ${stats.totalTabs} tabs monitored`, 'debug');
+          sendResponse({ success: true, stats: stats });
+        });
+        
+        return true; // 保持消息通道開放
+        
+      case 'PING_VIDEO_QUALITY':
+        sendResponse({ 
+          success: true, 
+          status: 'ok', 
+          tabCount: Object.keys(videoQualityData.tabs).length,
+          timestamp: Date.now()
+        });
+        return; // 立即返回，不需要保持通道開放
+        
+      default:
+        // 未知消息類型
+        logMessage(`Unknown message type: ${message.type}`, 'warn');
+        sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
+        break;
+    }
+    
+  } catch (error) {
+    logMessage(`Error handling message: ${error.message}`, 'error');
+    sendResponse({ success: false, error: error.message, timestamp: Date.now() });
   }
+  
+  return false; // 對於同步處理的消息，不需要保持通道開放
 });
 
 function startListening() {
@@ -1591,11 +1717,11 @@ function stopListening() {
 
 // 新增：定期清理舊日誌和過期的分頁資料（每小時執行一次）
 setInterval(() => {
-  const now = new Date();
-  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const currentTime = Date.now();
   const maxAge = 30 * 60 * 1000; // 30分鐘
-  
+    
   // 清理超過 24 小時的除錯日誌
   chrome.storage.local.get(['debugLogs'], (result) => {
     if (result.debugLogs) {
@@ -1628,4 +1754,257 @@ setInterval(() => {
       }
     }
   });
-}, 60 * 60 * 1000); // 每小時執行一次 
+}, 60 * 60 * 1000); // 每小時執行一次
+
+// ==================== 視頻品質監控系統 ====================
+
+// 視頻品質數據存儲
+let videoQualityData = {
+  global: {
+    totalVideos: 0,
+    activeVideos: 0,
+    lastUpdate: Date.now(),
+    platforms: {},
+    errors: []
+  },
+  tabs: {} // 按 tab 分組的視頻數據
+};
+
+// 視頻品質監控配置
+const VIDEO_QUALITY_CONFIG = {
+  MAX_VIDEOS_PER_TAB: 50,
+  MAX_ERRORS: 100,
+  DATA_RETENTION_HOURS: 24,
+  UPDATE_INTERVAL: 5000 // 5 秒
+};
+
+// 初始化視頻品質數據結構
+function initializeVideoQualityData(tabId) {
+  if (!videoQualityData.tabs[tabId]) {
+    videoQualityData.tabs[tabId] = {
+      videos: {},
+      platform: 'unknown',
+      url: '',
+      lastUpdate: Date.now(),
+      totalVideos: 0,
+      activeVideos: 0,
+      errors: []
+    };
+  }
+  return videoQualityData.tabs[tabId];
+}
+
+// 處理視頻品質更新
+function handleVideoQualityUpdate(tabId, data) {
+  try {
+    const tabData = initializeVideoQualityData(tabId);
+    
+    // 更新標籤頁基本信息
+    tabData.platform = data.platform || 'unknown';
+    tabData.url = data.url || '';
+    tabData.lastUpdate = Date.now();
+    tabData.totalVideos = data.totalVideos || 0;
+    tabData.activeVideos = data.activeVideos || 0;
+    
+    // 更新視頻數據
+    if (data.videos && Array.isArray(data.videos)) {
+      data.videos.forEach(video => {
+        if (video.id) {
+          tabData.videos[video.id] = {
+            ...video,
+            lastUpdate: Date.now()
+          };
+        }
+      });
+    }
+    
+    // 更新全域統計
+    updateGlobalVideoQualityStats();
+    
+    // 保存到 storage
+    saveVideoQualityData();
+    
+    logMessage(`Video quality data updated for tab ${tabId}: ${data.activeVideos} active videos`, 'info');
+    
+  } catch (error) {
+    logMessage(`Error handling video quality update: ${error.message}`, 'error');
+  }
+}
+
+// 更新全域視頻品質統計
+function updateGlobalVideoQualityStats() {
+  const global = videoQualityData.global;
+  
+  // 重置統計
+  global.totalVideos = 0;
+  global.activeVideos = 0;
+  global.platforms = {};
+  
+  // 計算各標籤頁的統計
+  Object.values(videoQualityData.tabs).forEach(tabData => {
+    global.totalVideos += tabData.totalVideos;
+    global.activeVideos += tabData.activeVideos;
+    
+    // 統計平台
+    if (tabData.platform && tabData.platform !== 'unknown') {
+      if (!global.platforms[tabData.platform]) {
+        global.platforms[tabData.platform] = {
+          tabs: 0,
+          totalVideos: 0,
+          activeVideos: 0
+        };
+      }
+      
+      global.platforms[tabData.platform].tabs++;
+      global.platforms[tabData.platform].totalVideos += tabData.totalVideos;
+      global.platforms[tabData.platform].activeVideos += tabData.activeVideos;
+    }
+  });
+  
+  global.lastUpdate = Date.now();
+}
+
+// 保存視頻品質數據到 storage
+function saveVideoQualityData() {
+  try {
+    // 只保存必要的數據，避免存儲空間過大
+    const dataToSave = {
+      global: videoQualityData.global,
+      tabCount: Object.keys(videoQualityData.tabs).length,
+      lastUpdate: Date.now()
+    };
+    
+    chrome.storage.local.set({ videoQualityData: dataToSave });
+    
+  } catch (error) {
+    logMessage(`Error saving video quality data: ${error.message}`, 'error');
+  }
+}
+
+// 獲取視頻品質數據
+function getVideoQualityData(tabId = null) {
+  if (tabId) {
+    return videoQualityData.tabs[tabId] || null;
+  }
+  
+  // 如果沒有指定tabId，嘗試獲取當前活躍標籤頁
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const activeTabId = tabs[0]?.id || currentTabId;
+      resolve({
+        global: videoQualityData.global,
+        currentTab: activeTabId ? videoQualityData.tabs[activeTabId] : null,
+        tabIds: Object.keys(videoQualityData.tabs),
+        activeTabId: activeTabId
+      });
+    });
+  });
+}
+
+// 清理視頻品質數據
+function cleanupVideoQualityData() {
+  const now = Date.now();
+  const maxAge = VIDEO_QUALITY_CONFIG.DATA_RETENTION_HOURS * 60 * 60 * 1000;
+  
+  Object.keys(videoQualityData.tabs).forEach(tabId => {
+    const tabData = videoQualityData.tabs[tabId];
+    
+    // 檢查數據是否過期
+    if (now - tabData.lastUpdate > maxAge) {
+      // 檢查標籤頁是否還存在
+      chrome.tabs.get(parseInt(tabId), (tab) => {
+        if (chrome.runtime.lastError) {
+          // 標籤頁不存在，刪除數據
+          delete videoQualityData.tabs[tabId];
+          logMessage(`Cleaned up video quality data for closed tab ${tabId}`, 'info');
+        }
+      });
+    }
+  });
+  
+  // 清理過期錯誤
+  videoQualityData.global.errors = videoQualityData.global.errors.filter(
+    error => now - error.timestamp < maxAge
+  );
+  
+  // 更新全域統計
+  updateGlobalVideoQualityStats();
+}
+
+// 處理視頻品質日誌
+function handleVideoQualityLog(tabId, logData) {
+  try {
+    const tabData = initializeVideoQualityData(tabId);
+    
+    const logEntry = {
+      ...logData,
+      tabId: tabId,
+      timestamp: Date.now()
+    };
+    
+    // 添加到標籤頁錯誤列表
+    if (logData.level === 'error') {
+      tabData.errors.push(logEntry);
+      
+      // 限制錯誤數量
+      if (tabData.errors.length > VIDEO_QUALITY_CONFIG.MAX_ERRORS) {
+        tabData.errors = tabData.errors.slice(-50);
+      }
+      
+      // 添加到全域錯誤列表
+      videoQualityData.global.errors.push(logEntry);
+      
+      if (videoQualityData.global.errors.length > VIDEO_QUALITY_CONFIG.MAX_ERRORS) {
+        videoQualityData.global.errors = videoQualityData.global.errors.slice(-50);
+      }
+    }
+    
+    logMessage(`Video quality log from tab ${tabId}: ${logData.message}`, logData.level);
+    
+  } catch (error) {
+    logMessage(`Error handling video quality log: ${error.message}`, 'error');
+  }
+}
+
+
+
+// 標籤頁事件監聽
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (videoQualityData.tabs[tabId]) {
+    delete videoQualityData.tabs[tabId];
+    updateGlobalVideoQualityStats();
+    logMessage(`Cleaned up video quality data for removed tab ${tabId}`, 'info');
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // 當標籤頁 URL 改變時，清理該標籤頁的視頻數據
+  if (changeInfo.url && videoQualityData.tabs[tabId]) {
+    const tabData = videoQualityData.tabs[tabId];
+    if (tabData.url && tabData.url !== changeInfo.url) {
+      // URL 改變，清理舊的視頻數據
+      tabData.videos = {};
+      tabData.totalVideos = 0;
+      tabData.activeVideos = 0;
+      tabData.url = changeInfo.url;
+      tabData.lastUpdate = Date.now();
+      
+      logMessage(`URL changed for tab ${tabId}, cleared video data`, 'info');
+    }
+  }
+});
+
+// 定期清理視頻品質數據
+setInterval(() => {
+  cleanupVideoQualityData();
+}, 10 * 60 * 1000); // 每 10 分鐘執行一次
+
+// 初始化時載入保存的視頻品質數據
+chrome.storage.local.get(['videoQualityData'], (result) => {
+  if (result.videoQualityData) {
+    videoQualityData.global = result.videoQualityData.global || videoQualityData.global;
+    logMessage(`Loaded video quality data: ${result.videoQualityData.tabCount || 0} tabs`, 'info');
+  }
+});
+
+logMessage('Video Quality Monitoring System initialized', 'info'); 

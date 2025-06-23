@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "CDN Detector",
-  "version": "1.0",
-  "description": "抓取當前網站的 HTTP Response Header、TLS 證書 Issuer、Remote IP，並判斷是否使用 CDN。",
+  "version": "2.1",
+  "description": "抓取當前網站的 HTTP Response Header、TLS 證書 Issuer、Remote IP，並判斷是否使用 CDN，提供詳細的快取效能分析。",
   "permissions": [
     "webRequest",
     "activeTab",
@@ -15,8 +15,16 @@
   "host_permissions": [
     "<all_urls>"
   ],
+  "content_scripts": [
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": "icon.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["debug-video.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 } 

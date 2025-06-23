@@ -596,7 +596,225 @@
       opacity: 1;
     }
     
+    /* 標籤頁導航樣式 */
+    .tab-navigation {
+      display: flex;
+      background: white;
+      border-radius: var(--border-radius-lg);
+      box-shadow: var(--shadow-md);
+      margin-bottom: var(--spacing-lg);
+      overflow: hidden;
+    }
+    
+    .tab-button {
+      flex: 1;
+      padding: var(--spacing-md);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: clamp(12px, 2.5vw, 14px);
+      font-weight: 500;
+      color: var(--text-color);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    
+    .tab-button:hover {
+      background: var(--light-color);
+      color: var(--primary-color);
+    }
+    
+    .tab-button.active {
+      background: var(--primary-color);
+      color: white;
+      font-weight: 600;
+    }
+    
+    .tab-button.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.5);
+    }
+    
+    /* 標籤頁內容 */
+    .tab-content {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* 視頻品質專用樣式 */
+    .video-quality-stats h3,
+    .video-quality-history h3 {
+      color: var(--dark-color);
+      margin: 0 0 var(--spacing-md) 0;
+      font-size: clamp(14px, 3vw, 16px);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+    }
+    
+    .video-quality-stats,
+    .video-quality-history {
+      background: white;
+      border-radius: var(--border-radius-lg);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-lg);
+      box-shadow: var(--shadow-md);
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+    
+    .video-quality-stats:hover,
+    .video-quality-history:hover {
+      box-shadow: var(--shadow-lg);
+      border-color: var(--info-color);
+    }
+    
+    /* 視頻品質統計卡片 */
+    .stat-card.quality {
+      border-left-color: var(--info-color);
+    }
+    
+    .stat-card.fps {
+      border-left-color: var(--warning-color);
+    }
+    
+    .stat-card.buffer {
+      border-left-color: var(--danger-color);
+    }
+    
+    .stat-card.dropped {
+      border-left-color: var(--danger-color);
+    }
+    
+    .stat-card.total {
+      border-left-color: var(--info-color);
+    }
+    
+    .stat-card.ratio {
+      border-left-color: var(--warning-color);
+    }
+    
+    /* 掉幀統計 */
+    .frame-stats {
+      margin-top: var(--spacing-lg);
+      padding-top: var(--spacing-lg);
+      border-top: 1px solid var(--border-color);
+    }
+    
+    .frame-stats h4 {
+      color: var(--dark-color);
+      margin: 0 0 var(--spacing-md) 0;
+      font-size: clamp(12px, 2.5vw, 14px);
+      font-weight: 600;
+    }
+    
+    /* 播放資訊 */
+    .playback-info {
+      margin-top: var(--spacing-lg);
+      padding-top: var(--spacing-lg);
+      border-top: 1px solid var(--border-color);
+    }
+    
+    .playback-info h4 {
+      color: var(--dark-color);
+      margin: 0 0 var(--spacing-md) 0;
+      font-size: clamp(12px, 2.5vw, 14px);
+      font-weight: 600;
+    }
+    
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--spacing-sm);
+    }
+    
+    .info-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--spacing-xs) var(--spacing-sm);
+      background: var(--light-color);
+      border-radius: var(--border-radius-sm);
+      font-size: clamp(11px, 2vw, 12px);
+    }
+    
+    .info-label {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    
+    /* 歷史記錄控制按鈕 */
+    .history-controls {
+      display: flex;
+      gap: var(--spacing-sm);
+      margin-bottom: var(--spacing-md);
+      justify-content: flex-end;
+    }
+    
+    .action-btn {
+      padding: var(--spacing-xs) var(--spacing-sm);
+      border: none;
+      border-radius: var(--border-radius-sm);
+      cursor: pointer;
+      font-size: clamp(10px, 2vw, 11px);
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    
+    .action-btn.primary {
+      background: var(--primary-color);
+      color: white;
+    }
+    
+    .action-btn.primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+    
+    .action-btn.danger {
+      background: var(--danger-color);
+      color: white;
+    }
+    
+    .action-btn.danger:hover {
+      background: #c82333;
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+    
+    /* 無資料提示 */
+    .no-data {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: clamp(11px, 2vw, 12px);
+      padding: var(--spacing-xl);
+      background: var(--light-color);
+      border-radius: var(--border-radius-md);
+      border: 1px dashed var(--border-color);
+    }
+    
     /* 響應式佈局優化 */
+    @media (max-width: 450px) {
+      .info-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-xs);
+      }
+      
+      .history-controls {
+        justify-content: center;
+      }
+    }
+    
     @media (max-height: 600px) {
       .scrollable-content {
         max-height: 200px;
@@ -626,66 +844,162 @@
 <body>
   <h1 class="main-title">CDN Detector</h1>
   
+  <!-- 標籤頁導航 - 隱藏影片品質標籤 -->
+  <div class="tab-navigation" style="display: none;">
+    <button class="tab-button active" data-tab="cdn">CDN 檢測</button>
+    <button class="tab-button" data-tab="video" style="display: none;">影片品質</button>
+  </div>
+  
   <!-- 分頁隔離提示 (已隱藏) -->
   <div style="background: #e3f2fd; border: 1px solid #2196f3; border-radius: 6px; padding: 8px; margin-bottom: 15px; font-size: 12px; color: #1976d2; display: none;">
     <strong>📋 分頁隔離模式</strong><br>
     每個分頁的檢測結果獨立儲存，開新分頁不會影響當前檢測結果
   </div>
   
-  <div class="toggle">
-    <label class="header">啟用 CDN 檢測</label>
-    <label class="switch">
-      <input type="checkbox" id="enableToggle">
-      <span class="slider"></span>
-    </label>
-  </div>
-  
-  <div class="status-section">
-    <p><span class="status-indicator" id="statusIndicator"></span>檢測狀態：<span id="detectionStatus">未啟用</span></p>
-    <p>檢測結果：<span id="detectionResult">N/A</span></p>
-  </div>
-  
-  <!-- 快取分析區域 -->
-  <div class="cache-analysis" id="cacheAnalysis" style="display: none;">
-    <h3>快取效能分析</h3>
+  <!-- CDN 檢測標籤頁內容 -->
+  <div id="cdn-tab" class="tab-content">
+    <div class="toggle">
+      <label class="header">啟用 CDN 檢測</label>
+      <label class="switch">
+        <input type="checkbox" id="enableToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
     
-    <div class="stats-grid">
-      <div class="stat-card hit">
-        <div class="stat-value" id="hitRatio">0%</div>
-        <div class="stat-label">HIT 比例</div>
+    <div class="status-section">
+      <p><span class="status-indicator" id="statusIndicator"></span>檢測狀態：<span id="detectionStatus">未啟用</span></p>
+      <p>檢測結果：<span id="detectionResult">N/A</span></p>
+    </div>
+    
+    <!-- 快取分析區域 - 移到 CDN 檢測標籤頁內 -->
+    <div class="cache-analysis" id="cacheAnalysis" style="display: none;">
+      <h3>快取效能分析</h3>
+      
+      <div class="stats-grid">
+        <div class="stat-card hit">
+          <div class="stat-value" id="hitRatio">0%</div>
+          <div class="stat-label">HIT 比例</div>
+        </div>
+        <div class="stat-card miss">
+          <div class="stat-value" id="sizeRatio">0%</div>
+          <div class="stat-label">大小 HIT 比例</div>
+        </div>
+        <div class="stat-card speed">
+          <div class="stat-value" id="overallSpeed">0 MB/s</div>
+          <div class="stat-label">整體速度</div>
+        </div>
+        <div class="stat-card size">
+          <div class="stat-value" id="totalSize">0 B</div>
+          <div class="stat-label">總資料量</div>
+        </div>
       </div>
-      <div class="stat-card miss">
-        <div class="stat-value" id="sizeRatio">0%</div>
-        <div class="stat-label">大小 HIT 比例</div>
+      
+      <div style="margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+          <span>快取命中率</span>
+          <span id="hitRatioText">0% (0/0)</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="hitProgressBar" style="width: 0%;"></div>
+        </div>
       </div>
-      <div class="stat-card speed">
-        <div class="stat-value" id="overallSpeed">0 MB/s</div>
-        <div class="stat-label">整體速度</div>
+      
+      <div class="speed-comparison" id="speedComparison" style="display: none;">
+        <div class="speed-item hit">
+          <div class="speed-dot hit"></div>
+          <span>HIT: <span id="hitSpeed">0</span> MB/s</span>
+        </div>
+        <div class="speed-item miss">
+          <div class="speed-dot miss"></div>
+          <span>MISS: <span id="missSpeed">0</span> MB/s</span>
+        </div>
       </div>
-      <div class="stat-card size">
-        <div class="stat-value" id="totalSize">0 B</div>
-        <div class="stat-label">總資料量</div>
+    </div>
+  </div>
+  
+  <!-- 影片品質標籤頁內容 - 已隱藏 -->
+  <div id="video-tab" class="tab-content" style="display: none !important;">
+    <!-- 影片品質檢測狀態 -->
+    <div class="status-section">
+      <p><span class="status-indicator" id="videoStatusIndicator"></span>影片監控：<span id="videoStatus">未檢測到影片</span></p>
+      <p>當前平台：<span id="videoPlatform">N/A</span></p>
+    </div>
+    
+    <!-- 影片品質統計 -->
+    <div class="video-quality-stats" id="videoQualityStats" style="display: none;">
+      <h3>📺 影片品質統計</h3>
+      
+      <div class="stats-grid">
+        <div class="stat-card quality">
+          <div class="stat-value" id="videoResolution">N/A</div>
+          <div class="stat-label">解析度</div>
+        </div>
+        <div class="stat-card speed">
+          <div class="stat-value" id="videoBitrate">N/A</div>
+          <div class="stat-label">位元率</div>
+        </div>
+        <div class="stat-card fps">
+          <div class="stat-value" id="videoFps">N/A</div>
+          <div class="stat-label">幀率</div>
+        </div>
+        <div class="stat-card buffer">
+          <div class="stat-value" id="bufferEvents">0</div>
+          <div class="stat-label">緩衝事件</div>
+        </div>
+      </div>
+      
+      <!-- 掉幀統計 -->
+      <div class="frame-stats" id="frameStats" style="display: none;">
+        <h4>🎯 掉幀統計</h4>
+        <div class="stats-grid">
+          <div class="stat-card dropped">
+            <div class="stat-value" id="droppedFrames">0</div>
+            <div class="stat-label">掉幀數</div>
+          </div>
+          <div class="stat-card total">
+            <div class="stat-value" id="totalFrames">0</div>
+            <div class="stat-label">總幀數</div>
+          </div>
+          <div class="stat-card ratio">
+            <div class="stat-value" id="dropRatio">0%</div>
+            <div class="stat-label">掉幀率</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 播放狀態 -->
+      <div class="playback-info">
+        <h4>▶️ 播放資訊</h4>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">播放時間：</span>
+            <span id="currentTime">00:00</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">總時長：</span>
+            <span id="duration">00:00</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">播放狀態：</span>
+            <span id="playbackState">未知</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">音量：</span>
+            <span id="volume">100%</span>
+          </div>
+        </div>
       </div>
     </div>
     
-    <div style="margin-bottom: 10px;">
-      <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
-        <span>快取命中率</span>
-        <span id="hitRatioText">0% (0/0)</span>
+    <!-- 影片品質歷史記錄 -->
+    <div class="video-quality-history" id="videoQualityHistory">
+      <h3>📊 品質歷史記錄</h3>
+      <div class="history-controls">
+        <button id="clearVideoHistory" class="action-btn danger">清除記錄</button>
+        <button id="refreshVideoData" class="action-btn primary">重新整理</button>
       </div>
-      <div class="progress-bar">
-        <div class="progress-fill" id="hitProgressBar" style="width: 0%;"></div>
-      </div>
-    </div>
-    
-    <div class="speed-comparison" id="speedComparison" style="display: none;">
-      <div class="speed-item hit">
-        <div class="speed-dot hit"></div>
-        <span>HIT: <span id="hitSpeed">0</span> MB/s</span>
-      </div>
-      <div class="speed-item miss">
-        <div class="speed-dot miss"></div>
-        <span>MISS: <span id="missSpeed">0</span> MB/s</span>
+      <div id="videoHistoryContent" class="scrollable-content">
+        <div class="no-data">暫無影片品質資料</div>
       </div>
     </div>
   </div>

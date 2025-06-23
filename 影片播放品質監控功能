@@ -1,0 +1,320 @@
+## 🎯 核心功能需求
+
+### 1. **多平台兼容性**
+```
+"需要支援主流影片平台：YouTube、Netflix、Twitch、Vimeo、HTML5 video 元素
+每個平台都有不同的 API 和資料取得方式，需要分別處理"
+```
+
+### 2. **Content Script 架構**
+```
+"必須使用 content script 注入到網頁中監控 video 元素
+需要處理動態載入的影片（SPA 應用），使用 MutationObserver 監控 DOM 變化
+確保在 Manifest V3 環境下正常運作"
+```
+
+### 3. **影片品質檢測指標**
+```
+"需要檢測以下指標：
+- 解析度 (videoWidth, videoHeight)  
+- Bitrate (從 network requests 或 media source 推算)
+- 幀率 (使用 getVideoPlaybackQuality API)
+- 緩衝事件統計 (waiting, seeking, stalled 事件)
+- 掉幀統計 (droppedVideoFrames, totalVideoFrames)
+- 播放流暢度分析"
+```
+
+## 🔧 技術實作細節
+
+### 4. **資料取得策略**
+```
+"優先級順序：
+1. Video Element API (videoWidth, videoHeight, getVideoPlaybackQuality)
+2. Media Source Extensions 資料
+3. Network Request 分析 (m3u8, dash segments)
+4. 平台特定 API (YouTube Stats for Nerds, Netflix 內部 API)
+5. URL 參數解析作為 fallback"
+```
+
+### 5. **效能考量**
+```
+"資料收集間隔設定為 2-5 秒，避免過度消耗資源
+使用 requestIdleCallback 在瀏覽器閒置時處理資料
+實作資料快取機制，相同影片不重複分析
+設定記憶體限制，定期清理舊資料"
+```
+
+### 6. **錯誤處理機制**
+```
+"處理以下場景：
+- 影片未載入完成時的狀態
+- 平台阻擋 API 存取的情況
+- Content script 注入失敗
+- Cross-origin 限制問題
+- 影片格式不支援的 fallback"
+```
+
+## 📊 UI/UX 整合
+
+### 7. **與現有 CDN Detector 整合**
+```
+"新增 '影片品質' 標籤頁到現有 popup
+保持與現有 UI 風格一致
+資料格式與 CDN 檢測資料結構相似
+支援分頁隔離功能，每個 tab 獨立追蹤"
+```
+
+### 8. **即時資料顯示**
+```
+"設計即時更新的品質儀表板：
+- 當前播放品質指標
+- 歷史品質變化圖表
+- 緩衝事件時間軸
+- 品質評分系統 (A/B/C/D/F)
+- 與 CDN 效能的關聯分析"
+```
+
+## 🎮 平台特定處理
+
+### 9. **YouTube 特殊處理**
+```
+"監控 ytInitialPlayerResponse 物件
+使用 yt.config_.EXPERIMENT_FLAGS 取得內部資料
+監聽 YouTube 的品質切換事件
+處理 YouTube Premium 和廣告的影響"
+```
+
+### 10. **Netflix/串流平台**
+```
+"監控 Network tab 中的 range requests
+解析 DASH/HLS manifest 檔案
+處理 DRM 保護內容的限制
+分析 adaptive bitrate 切換模式"
+```
+
+## 🔒 安全性與權限
+
+### 11. **權限設定**
+```
+"更新 manifest.json 添加必要權限：
+- content_scripts 權限
+- 主流影片網站的 host_permissions
+- webRequest 權限用於監控影片請求
+- 確保符合 Manifest V3 規範"
+```
+
+### 12. **隱私保護**
+```
+"不收集使用者觀看的影片內容資訊
+只收集技術指標，不記錄影片標題或 URL
+提供資料清除功能
+本地儲存，不上傳到遠端伺服器"
+```
+
+## 📱 測試與調試
+
+### 13. **測試場景**
+```
+"準備測試案例：
+- 不同解析度的測試影片
+- 網路速度變化模擬
+- 各大平台的實際影片
+- 移動端響應式測試
+- 錯誤情況的 graceful degradation"
+```
+
+### 14. **調試輔助**
+```
+"加入詳細的 console.log 輸出
+提供調試模式開關
+在 popup 中顯示原始資料供開發者檢視
+錯誤報告機制"
+```
+
+## 🚀 進階功能提示
+
+### 15. **智能分析**
+```
+"實作品質趨勢分析：
+- 檢測品質下降時間點
+- 與 CDN 切換的關聯性
+- 自動品質調整建議
+- 網路擁塞警告"
+```
+
+**"這是一個 Chrome Extension 專案，基於 Manifest V3，需要與現有的 CDN Detector 功能整合，保持程式碼風格和架構一致性"**
+
+# 影片播放品質監控功能 - 故障排除指南
+
+## 問題診斷步驟
+
+### 1. 重新載入擴充功能
+```bash
+# 在Chrome擴充功能管理頁面中：
+# 1. 前往 chrome://extensions/
+# 2. 找到 "CDN Detector" 擴充功能
+# 3. 點擊重新載入按鈕 (或關閉再啟用)
+```
+
+### 2. 使用測試頁面進行診斷
+```bash
+# 開啟測試頁面
+file:///path/to/your/project/test-video.html
+```
+
+測試頁面功能：
+- **自動檢查擴充功能狀態**：顯示是否正確連接
+- **Content Script 檢測**：確認影片監控腳本是否載入
+- **API 測試**：直接測試影片品質數據獲取
+- **即時影片事件監控**：顯示影片播放狀態變化
+
+### 3. 使用調試頁面
+```bash
+# 開啟調試頁面
+file:///path/to/your/project/debug-video.html
+```
+
+調試頁面功能：
+- **即時日誌監控**：顯示所有console日誌
+- **擴充功能狀態檢查**：檢查各個組件是否正常
+- **手動測試功能**：添加測試影片、清除數據等
+
+## 已修復的問題
+
+### ✅ 1. 消息通道錯誤
+**問題**：`The message port closed before a response was received`
+**修復**：
+- 在background.js中添加了錯誤處理
+- 在popup.js中添加了try-catch包裝
+- 改進了Promise處理機制
+
+### ✅ 2. Content Script 注入時機
+**問題**：Content script載入太早，DOM未準備好
+**修復**：
+- 將manifest.json中的`run_at`從`document_start`改為`document_idle`
+- 確保DOM完全載入後再初始化監控
+
+### ✅ 3. 平台檢測邏輯錯誤
+**問題**：平台常數引用錯誤
+**修復**：
+- 修正了`initializeVideoMonitoring`中的平台比較
+- 使用正確的`PLATFORMS`常數而非字串
+
+### ✅ 4. 調試信息增強
+**修復**：
+- 添加了詳細的載入狀態報告
+- 增強了錯誤日誌記錄
+- 改進了數據結構檢查
+
+## 測試步驟
+
+### 第一步：基本功能測試
+1. **重新載入擴充功能**
+2. **開啟test-video.html**
+3. **點擊"檢查擴充功能狀態"按鈕**
+4. **確認狀態顯示為綠色（已連接、已載入）**
+
+### 第二步：影片監控測試
+1. **點擊"播放所有影片"按鈕**
+2. **等待影片開始播放**
+3. **點擊"測試影片品質API"按鈕**
+4. **檢查返回的JSON數據是否包含影片信息**
+
+### 第三步：擴充功能界面測試
+1. **點擊Chrome工具列上的CDN Detector圖示**
+2. **切換到"影片品質"標籤頁**
+3. **檢查是否顯示"檢測到影片播放"**
+4. **確認影片統計數據是否正確顯示**
+
+### 第四步：實際網站測試
+1. **前往YouTube.com**
+2. **播放任何影片**
+3. **開啟擴充功能並切換到影片品質標籤**
+4. **檢查是否能檢測到YouTube影片**
+
+## 故障排除
+
+### 如果仍然顯示"未檢測到影片"
+
+#### 檢查1：Console 日誌
+```javascript
+// 按F12開啟開發者工具，在Console中檢查是否有以下日誌：
+// "[Video Quality Monitor] 視頻品質監控已載入 - 平台: youtube"
+// "[Video Quality Monitor] 初始化視頻監控 - 平台: youtube, 重試次數: 0"
+```
+
+#### 檢查2：擴充功能權限
+```bash
+# 確認manifest.json中的權限包含：
+# - "activeTab"
+# - "storage" 
+# - "tabs"
+# - host_permissions: ["<all_urls>"]
+```
+
+#### 檢查3：Content Script 注入
+```javascript
+// 在網頁Console中執行：
+console.log('Content scripts:', chrome.runtime.getManifest().content_scripts);
+```
+
+#### 檢查4：Background Script 狀態
+```javascript
+// 在擴充功能的Service Worker中檢查：
+// 前往 chrome://extensions/ > CDN Detector > Service Worker
+// 查看是否有錯誤訊息
+```
+
+### 如果API測試失敗
+
+#### 解決方案1：重啟Chrome
+有時候擴充功能的消息通道會出現問題，重啟瀏覽器可以解決。
+
+#### 解決方案2：檢查擴充功能ID
+```javascript
+// 在Console中檢查：
+console.log('Extension ID:', chrome.runtime.id);
+```
+
+#### 解決方案3：清除擴充功能數據
+```javascript
+// 在擴充功能popup中執行：
+chrome.storage.local.clear();
+```
+
+## 技術細節
+
+### 數據流向
+```
+網頁影片元素 
+    ↓ (video-quality-monitor.js 監控)
+Content Script 收集數據
+    ↓ (chrome.runtime.sendMessage)
+Background Script 存儲數據
+    ↓ (chrome.runtime.sendMessage 回應)
+Popup Script 顯示數據
+```
+
+### 支援的平台
+- ✅ YouTube (`*.youtube.com/*`, `*.youtu.be/*`)
+- ✅ Netflix (`*.netflix.com/*`)
+- ✅ Twitch (`*.twitch.tv/*`)
+- ✅ Vimeo (`*.vimeo.com/*`)
+- ✅ 一般HTML5影片 (`*://*/*`)
+
+### 監控的數據指標
+- **基本屬性**：解析度、播放時間、暫停狀態
+- **品質指標**：掉幀統計、緩衝事件
+- **網路狀態**：載入狀態、準備狀態
+- **平台特定**：YouTube實驗標誌、Netflix媒體源等
+
+## 下一步
+
+如果以上步驟都無法解決問題，請：
+
+1. **收集完整的Console日誌**（包括錯誤訊息）
+2. **提供測試的網站URL**
+3. **描述具體的錯誤現象**
+4. **確認Chrome版本和操作系統**
+
+這樣可以進行更深入的診斷和修復。

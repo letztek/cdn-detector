@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>影片品質監控測試頁面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #1976d2;
+        }
+        
+        .debug-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>影片品質監控測試頁面</h1>
+        
+        <div class="info">
+            <strong>說明：</strong>此頁面用於測試Chrome擴充功能的影片品質監控功能。請確保已安裝並啟用CDN Detector擴充功能。
+        </div>
+        
+        <div class="video-container">
+            <h3>測試影片 1 - Big Buck Bunny</h3>
+            <video id="testVideo1" controls preload="metadata">
+                <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+                <source src="https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4" type="video/mp4">
+                您的瀏覽器不支援影片播放。
+            </video>
+        </div>
+        
+        <div class="video-container">
+            <h3>測試影片 2 - Elephant Dream</h3>
+            <video id="testVideo2" controls preload="metadata">
+                <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4" type="video/mp4">
+                <source src="https://sample-videos.com/zip/10/mp4/SampleVideo_640x360_1mb.mp4" type="video/mp4">
+                您的瀏覽器不支援影片播放。
+            </video>
+        </div>
+        
+        <div class="controls">
+            <button onclick="playAllVideos()">播放所有影片</button>
+            <button onclick="pauseAllVideos()">暫停所有影片</button>
+            <button onclick="checkExtensionStatus()">檢查擴充功能狀態</button>
+            <button onclick="testVideoQualityAPI()">測試影片品質API</button>
+        </div>
+        
+        <div class="debug-info">
+            <h4>調試資訊：</h4>
+            <div id="debugOutput">
+                <p>頁面載入時間: <span id="loadTime"></span></p>
+                <p>影片元素數量: <span id="videoCount"></span></p>
+                <p>擴充功能狀態: <span id="extensionStatus" class="status">檢查中...</span></p>
+                <p>Content Script 狀態: <span id="contentScriptStatus" class="status">檢查中...</span></p>
+                <div id="videoDetails"></div>
+                <div id="apiTestResults"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 頁面載入時間
+        document.getElementById('loadTime').textContent = new Date().toLocaleTimeString();
+        
+        // 統計影片元素
+        const videos = document.querySelectorAll('video');
+        document.getElementById('videoCount').textContent = videos.length;
+        
+        // 播放所有影片
+        function playAllVideos() {
+            videos.forEach(video => {
+                video.play().catch(e => console.log('播放失敗:', e));
+            });
+        }
+        
+        // 暫停所有影片
+        function pauseAllVideos() {
+            videos.forEach(video => {
+                video.pause();
+            });
+        }
+        
+        // 檢查擴充功能狀態
+        function checkExtensionStatus() {
+            const extensionStatus = document.getElementById('extensionStatus');
+            const contentScriptStatus = document.getElementById('contentScriptStatus');
+            
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                extensionStatus.textContent = '已連接';
+                extensionStatus.className = 'status success';
+                
+                // 檢查是否有影片品質監控的日誌
+                if (window.console && console.log.toString().includes('Video Quality Monitor')) {
+                    contentScriptStatus.textContent = '已載入';
+                    contentScriptStatus.className = 'status success';
+                } else {
+                    contentScriptStatus.textContent = '未檢測到';
+                    contentScriptStatus.className = 'status error';
+                }
+            } else {
+                extensionStatus.textContent = '未連接';
+                extensionStatus.className = 'status error';
+                contentScriptStatus.textContent = '無法檢測';
+                contentScriptStatus.className = 'status error';
+            }
+        }
+        
+        // 測試影片品質API
+        function testVideoQualityAPI() {
+            const resultsDiv = document.getElementById('apiTestResults');
+            resultsDiv.innerHTML = '<h5>API 測試結果：</h5>';
+            
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                chrome.runtime.sendMessage({ type: 'GET_VIDEO_QUALITY_DATA' }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        resultsDiv.innerHTML += `<p style="color: red;">錯誤: ${chrome.runtime.lastError.message}</p>`;
+                    } else {
+                        resultsDiv.innerHTML += `<pre style="background: #f0f0f0; padding: 10px; border-radius: 4px; overflow-x: auto;">${JSON.stringify(response, null, 2)}</pre>`;
+                    }
+                });
+            } else {
+                resultsDiv.innerHTML += '<p style="color: red;">Chrome 擴充功能 API 不可用</p>';
+            }
+        }
+        
+        // 監聽影片事件
+        videos.forEach((video, index) => {
+            const videoId = `testVideo${index + 1}`;
+            
+            video.addEventListener('loadedmetadata', () => {
+                updateVideoDetails(videoId, '元數據已載入');
+            });
+            
+            video.addEventListener('play', () => {
+                updateVideoDetails(videoId, '開始播放');
+            });
+            
+            video.addEventListener('pause', () => {
+                updateVideoDetails(videoId, '暫停播放');
+            });
+            
+            video.addEventListener('ended', () => {
+                updateVideoDetails(videoId, '播放結束');
+            });
+            
+            video.addEventListener('error', (e) => {
+                updateVideoDetails(videoId, `播放錯誤: ${e.message || '未知錯誤'}`);
+            });
+        });
+        
+        function updateVideoDetails(videoId, status) {
+            const detailsDiv = document.getElementById('videoDetails');
+            const timestamp = new Date().toLocaleTimeString();
+            detailsDiv.innerHTML += `<p>${timestamp} - ${videoId}: ${status}</p>`;
+        }
+        
+        // 頁面載入完成後自動檢查狀態
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                checkExtensionStatus();
+            }, 2000);
+        });
+        
+        // 監聽來自content script的訊息
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'VIDEO_QUALITY_UPDATE') {
+                console.log('收到影片品質更新:', event.data);
+                updateVideoDetails('system', '收到影片品質更新');
+            }
+        });
+        
+        // 定期檢查控制台是否有影片品質監控的日誌
+        setInterval(() => {
+            checkExtensionStatus();
+        }, 5000);
+    </script>
+</body>
+</html> 

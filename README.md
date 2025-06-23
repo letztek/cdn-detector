@@ -1,7 +1,7 @@
 # CDN Detector
 
 ## 專案介紹
-CDN Detector 是一個 Google Chrome 擴充功能，用於檢測當前網頁的資源是否經由多種 CDN 服務傳遞，並提供詳細的檢測結果和實時日誌。支援 Cloudflare、Amazon CloudFront、Fastly、KeyCDN、Microsoft Azure CDN、Google Cloud CDN、Akamai 等主流 CDN 服務。
+CDN Detector 是一個 Google Chrome 擴充功能，專門用於檢測當前網頁的資源是否經由多種 CDN 服務傳遞，並提供詳細的檢測結果、快取效能分析和實時日誌。支援 Cloudflare、Amazon CloudFront、Fastly、KeyCDN、Microsoft Azure CDN、Google Cloud CDN、Akamai、AspirappsCDN 等 8 大主流 CDN 服務。
 
 ## 主要功能
 - 🔍 **多 CDN 檢測**：自動檢測 8 大主流 CDN 服務（Cloudflare、CloudFront、Fastly、KeyCDN、Azure CDN、Google Cloud CDN、Akamai、AspirappsCDN）
@@ -181,11 +181,18 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - **host_permissions**：存取所有網站的請求資料
 
 ## 版本資訊
-- **版本**：2.0
+- **版本**：2.1
 - **Manifest 版本**：V3
 - **相容性**：Chrome 88+
 
 ### 更新歷史
+**v2.1** (2024-12-23)
+- 🎯 **功能精簡**：專注於 CDN 檢測核心功能，暫時移除影片品質監控
+- 🚀 **效能最佳化**：減少不必要的背景處理，提升擴充功能穩定性
+- 🔧 **通信最佳化**：修復 popup 與 background script 間的通信問題
+- 💅 **介面最佳化**：簡化用戶介面，專注於 CDN 檢測功能
+- 📊 **快取分析增強**：改進快取效能分析的準確性和可讀性
+
 **v2.0** (2024-12-20)
 - 🚀 **重大更新**：支援 8 大主流 CDN 服務檢測
 - ✨ 新增多 CDN 同時檢測和分析功能
@@ -235,7 +242,7 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 本專案採用 MIT 授權條款。
 
 ## 聯絡資訊
-如有問題或建議，請透過專案 Issues 頁面回報。
+如有問題或建議，請透過專案 Issues 頁面回報。 
 
 ---
 

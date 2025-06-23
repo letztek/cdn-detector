@@ -8,6 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // 初始化標籤頁功能
+  initializeTabs();
+
   const enableToggle = document.getElementById('enableToggle');
   const detectionStatus = document.getElementById('detectionStatus');
   const detectionResult = document.getElementById('detectionResult');
@@ -77,13 +80,52 @@ document.addEventListener('DOMContentLoaded', () => {
     // 新增：顯示檢測日誌功能
     displayDetectionLog();
     
-    // 新增：定期刷新統計和日誌
-    setInterval(() => {
+    // 初始化影片品質監控 - 已暫時停用
+    // initializeVideoQuality();
+    
+    // 修改：只在必要時自動刷新 - 避免過度頻繁的請求
+    // 只有在 popup 打開時才刷新，避免持續請求導致通信錯誤
+    let refreshInterval = null;
+    
+    // 監聽 popup 的可見性變化
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+        console.log('Popup hidden, stopped auto-refresh');
+      } else if (!document.hidden && !refreshInterval) {
+        refreshInterval = setInterval(() => {
       loadCurrentTabDetection(); // 改為載入當前標籤頁數據
       refreshDetectionLog();
-    }, 2000); // 每2秒刷新一次
+          // 影片品質數據刷新 - 已暫時停用
+          // if (document.getElementById('videoStatusIndicator')?.classList.contains('active')) {
+          //   refreshVideoQuality();
+          // }
+        }, 5000); // 減少頻率到每5秒刷新一次
+        console.log('Popup visible, started auto-refresh');
+      }
+    });
+    
+    // 初始啟動自動刷新
+    refreshInterval = setInterval(() => {
+      loadCurrentTabDetection();
+      refreshDetectionLog();
+      // 影片品質數據刷新 - 已暫時停用
+      // if (document.getElementById('videoStatusIndicator')?.classList.contains('active')) {
+      //   refreshVideoQuality();
+      // }
+    }, 5000); // 減少頻率到每5秒刷新一次
     
     console.log('Popup initialization completed');
+    
+    // 添加 popup 卸載時的清理邏輯
+    window.addEventListener('beforeunload', () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+        console.log('Popup unloading, cleared refresh interval');
+      }
+    });
     
     // 確保狀態已更新
     const detectionStatus = document.getElementById('detectionStatus');
@@ -508,7 +550,13 @@ function displayDetectionLog() {
       existingContainer.remove();
     }
     
+    // 只在CDN檢測標籤頁中顯示日誌
+    const cdnTab = document.getElementById('cdn-tab');
+    if (cdnTab) {
+      cdnTab.appendChild(logContainer);
+    } else {
     document.body.appendChild(logContainer);
+    }
     
     // 添加按鈕事件監聽器
     document.getElementById('showCdnOnly').addEventListener('click', (e) => {
@@ -955,4 +1003,379 @@ function clearDetectionLog() {
   }
 }
 
- 
+// =============================================================================
+// 標籤頁功能
+// =============================================================================
+
+function initializeTabs() {
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabContents = document.querySelectorAll('.tab-content');
+  
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const targetTab = button.getAttribute('data-tab');
+      
+      // 移除所有活動狀態
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      tabContents.forEach(content => content.style.display = 'none');
+      
+      // 設置當前活動標籤
+      button.classList.add('active');
+      const targetContent = document.getElementById(`${targetTab}-tab`);
+      if (targetContent) {
+        targetContent.style.display = 'block';
+      }
+      
+      // 影片標籤功能已暫時停用
+      // if (targetTab === 'video') {
+      //   refreshVideoQuality();
+      // }
+    });
+  });
+}
+
+// =============================================================================
+// 影片品質監控功能
+// =============================================================================
+
+function initializeVideoQuality() {
+  // 綁定按鈕事件
+  const clearVideoHistoryBtn = document.getElementById('clearVideoHistory');
+  const refreshVideoDataBtn = document.getElementById('refreshVideoData');
+  
+  if (clearVideoHistoryBtn) {
+    clearVideoHistoryBtn.addEventListener('click', clearVideoHistory);
+  }
+  
+  if (refreshVideoDataBtn) {
+    refreshVideoDataBtn.addEventListener('click', refreshVideoQuality);
+  }
+  
+  // 初始載入影片品質數據（僅在第一次載入時）
+  console.log('Initializing video quality monitoring...');
+  // 不立即刷新，等待用戶操作或檢測到實際視頻
+}
+
+// 添加請求狀態追蹤，防止重複請求
+let isVideoQualityRequesting = false;
+let videoQualityRequestCount = 0;
+
+function refreshVideoQuality() {
+  // 防止重複請求
+  if (isVideoQualityRequesting) {
+    console.log('Video quality request already in progress, skipping...');
+    return;
+  }
+  
+  // 檢查請求頻率，避免過度請求
+  videoQualityRequestCount++;
+  if (videoQualityRequestCount > 10) {
+    console.warn('Too many video quality requests, throttling...');
+    setTimeout(() => {
+      videoQualityRequestCount = Math.max(0, videoQualityRequestCount - 5);
+    }, 10000);
+    return;
+  }
+  
+  isVideoQualityRequesting = true;
+  console.log('Requesting video quality data...');
+  
+  try {
+    // 首先檢查 Chrome runtime 是否可用
+    if (!chrome.runtime || !chrome.runtime.sendMessage) {
+      console.warn('Chrome runtime not available for video quality request');
+      updateVideoQualityDisplay(null);
+      isVideoQualityRequesting = false;
+      return;
+    }
+    
+    // 設置整體超時機制
+    const requestTimeout = setTimeout(() => {
+      console.warn('Video quality request timed out');
+      isVideoQualityRequesting = false;
+      updateVideoQualityDisplay(null);
+    }, 8000);
+    
+    // 發送 PING 檢查
+    chrome.runtime.sendMessage({ type: 'PING_VIDEO_QUALITY' }, (pingResponse) => {
+      if (chrome.runtime.lastError) {
+        console.log('Background script ping failed (expected if no videos):', chrome.runtime.lastError);
+        // 清除超時器並重置狀態
+        clearTimeout(requestTimeout);
+        isVideoQualityRequesting = false;
+        updateVideoQualityDisplay(null);
+        return;
+      }
+      
+      console.log('Background script ping successful:', pingResponse);
+      
+      // 發送視頻品質數據請求
+      chrome.runtime.sendMessage({ type: 'GET_VIDEO_QUALITY_DATA' }, (response) => {
+        // 清除超時器
+        clearTimeout(requestTimeout);
+        isVideoQualityRequesting = false;
+        
+        if (chrome.runtime.lastError) {
+          console.log('Video quality data request failed (expected if no videos):', chrome.runtime.lastError);
+          updateVideoQualityDisplay(null);
+          return;
+        }
+        
+        console.log('Video quality response received:', response);
+        
+        if (response) {
+          if (response.success) {
+            console.log('Video quality data retrieved successfully:', response.data);
+            updateVideoQualityDisplay(response.data);
+          } else {
+            console.log('Video quality request failed:', response.error);
+            // 即使請求失敗，也嘗試使用返回的數據
+            updateVideoQualityDisplay(response.data || null);
+          }
+        } else {
+          console.log('No response received from background script');
+          updateVideoQualityDisplay(null);
+        }
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error sending video quality message:', error);
+    isVideoQualityRequesting = false;
+    updateVideoQualityDisplay(null);
+  }
+}
+
+function updateVideoQualityDisplay(data) {
+  // 減少日誌輸出，只在有實際視頻數據時才詳細記錄
+  const hasVideoData = data && data.currentTab && data.currentTab.videos && Object.keys(data.currentTab.videos).length > 0;
+  
+  if (hasVideoData) {
+    console.log('Updating video quality display with active video data');
+  }
+  
+  const videoStatusIndicator = document.getElementById('videoStatusIndicator');
+  const videoStatus = document.getElementById('videoStatus');
+  const videoPlatform = document.getElementById('videoPlatform');
+  const videoQualityStats = document.getElementById('videoQualityStats');
+  
+  if (!data || !data.currentTab || !data.currentTab.videos || Object.keys(data.currentTab.videos).length === 0) {
+    // 沒有影片數據 - 靜默處理，避免過多日誌
+    console.log('No video data available (this is normal if no videos are playing)');
+    
+    if (videoStatusIndicator) videoStatusIndicator.className = 'status-indicator inactive';
+    if (videoStatus) videoStatus.textContent = '未檢測到影片';
+    if (videoPlatform) videoPlatform.textContent = 'N/A';
+    if (videoQualityStats) videoQualityStats.style.display = 'none';
+    
+    updateVideoHistory([]);
+    return;
+  }
+  
+  // 將videos物件轉換為陣列，並獲取最新的影片數據
+  const videosArray = Object.values(data.currentTab.videos);
+  const latestVideo = videosArray[videosArray.length - 1];
+  
+  console.log(`Using latest video data: ${latestVideo.platform} platform, ${latestVideo.latestMetrics ? latestVideo.latestMetrics.length : 0} metrics`);
+  
+  // 更新狀態指示器
+  if (videoStatusIndicator) videoStatusIndicator.className = 'status-indicator active';
+  if (videoStatus) videoStatus.textContent = '檢測到影片播放';
+  if (videoPlatform) videoPlatform.textContent = data.currentTab.platform || '未知平台';
+  if (videoQualityStats) videoQualityStats.style.display = 'block';
+  
+  // 更新影片品質統計
+  updateVideoStats(latestVideo);
+  
+  // 更新歷史記錄
+  updateVideoHistory(videosArray);
+}
+
+function updateVideoStats(videoData) {
+  // 從latestMetrics中獲取最新的指標數據
+  const latestMetric = videoData.latestMetrics && videoData.latestMetrics.length > 0 
+    ? videoData.latestMetrics[videoData.latestMetrics.length - 1] 
+    : null;
+  
+  // 基本品質指標
+  const videoResolution = document.getElementById('videoResolution');
+  const videoBitrate = document.getElementById('videoBitrate');
+  const videoFps = document.getElementById('videoFps');
+  const bufferEvents = document.getElementById('bufferEvents');
+  
+  if (videoResolution) {
+    if (latestMetric && latestMetric.videoWidth && latestMetric.videoHeight) {
+      videoResolution.textContent = `${latestMetric.videoWidth}x${latestMetric.videoHeight}`;
+    } else {
+      videoResolution.textContent = 'N/A';
+    }
+  }
+  
+  if (videoBitrate) {
+    // 位元率需要從網路狀態或其他來源推算，暫時顯示N/A
+    videoBitrate.textContent = 'N/A';
+  }
+  
+  if (videoFps) {
+    // 幀率需要從播放品質數據計算，暫時顯示N/A
+    videoFps.textContent = 'N/A';
+  }
+  
+  if (bufferEvents) {
+    // 計算緩衝事件數量
+    const bufferCount = videoData.recentEvents 
+      ? videoData.recentEvents.filter(event => event.type === 'waiting' || event.type === 'stalled').length 
+      : 0;
+    bufferEvents.textContent = bufferCount;
+  }
+  
+  // 掉幀統計
+  updateFrameStats(latestMetric);
+  
+  // 播放資訊
+  updatePlaybackInfo(latestMetric);
+}
+
+function updateFrameStats(latestMetric) {
+  const frameStats = document.getElementById('frameStats');
+  const droppedFrames = document.getElementById('droppedFrames');
+  const totalFrames = document.getElementById('totalFrames');
+  const dropRatio = document.getElementById('dropRatio');
+  
+  const playbackQuality = latestMetric && latestMetric.playbackQuality;
+  const hasFrameData = playbackQuality && 
+    (playbackQuality.droppedVideoFrames !== undefined || playbackQuality.totalVideoFrames !== undefined);
+  
+  if (frameStats) {
+    frameStats.style.display = hasFrameData ? 'block' : 'none';
+  }
+  
+  if (hasFrameData) {
+    const dropped = playbackQuality.droppedVideoFrames || 0;
+    const total = playbackQuality.totalVideoFrames || 0;
+    const ratio = total > 0 ? ((dropped / total) * 100).toFixed(2) : 0;
+    
+    if (droppedFrames) droppedFrames.textContent = dropped;
+    if (totalFrames) totalFrames.textContent = total;
+    if (dropRatio) dropRatio.textContent = `${ratio}%`;
+  }
+}
+
+function updatePlaybackInfo(latestMetric) {
+  const currentTime = document.getElementById('currentTime');
+  const duration = document.getElementById('duration');
+  const playbackState = document.getElementById('playbackState');
+  const volume = document.getElementById('volume');
+  
+  if (currentTime) {
+    currentTime.textContent = formatTime(latestMetric ? latestMetric.currentTime || 0 : 0);
+  }
+  
+  if (duration) {
+    duration.textContent = formatTime(latestMetric ? latestMetric.duration || 0 : 0);
+  }
+  
+  if (playbackState) {
+    let state = '未知';
+    if (latestMetric) {
+      if (latestMetric.paused === false) {
+        state = '播放中';
+      } else if (latestMetric.paused === true) {
+        state = '暫停';
+      }
+    }
+    playbackState.textContent = state;
+  }
+  
+  if (volume) {
+    // 音量資訊可能不在latestMetric中，暫時顯示N/A
+    volume.textContent = 'N/A';
+  }
+}
+
+function updateVideoHistory(videos) {
+  const historyContent = document.getElementById('videoHistoryContent');
+  if (!historyContent) return;
+  
+  if (!videos || videos.length === 0) {
+    historyContent.innerHTML = '<div class="no-data">暫無影片品質資料</div>';
+    return;
+  }
+  
+  const historyHtml = videos.slice(-10).reverse().map(video => {
+    const timestamp = new Date(video.startTime || Date.now()).toLocaleTimeString();
+    
+    // 從最新的metrics中獲取解析度
+    const latestMetric = video.latestMetrics && video.latestMetrics.length > 0 
+      ? video.latestMetrics[video.latestMetrics.length - 1] 
+      : null;
+    
+    const resolution = latestMetric && latestMetric.videoWidth && latestMetric.videoHeight
+      ? `${latestMetric.videoWidth}x${latestMetric.videoHeight}`
+      : 'N/A';
+    
+    const bitrate = 'N/A'; // 位元率暫時無法從當前數據獲取
+    
+    // 計算緩衝事件數量
+    const bufferCount = video.recentEvents 
+      ? video.recentEvents.filter(event => event.type === 'waiting' || event.type === 'stalled').length 
+      : 0;
+    
+    return `
+      <div class="history-item" style="background: white; border-radius: 6px; padding: 10px; margin-bottom: 8px; border-left: 3px solid var(--info-color);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span style="font-weight: 500; font-size: 12px;">影片 ${video.id.substring(0, 8)}...</span>
+          <span style="font-size: 11px; color: #666;">${timestamp}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+          <div>解析度: ${resolution}</div>
+          <div>狀態: ${video.active ? '活動中' : '已停止'}</div>
+        </div>
+        ${bufferCount > 0 ? `<div style="font-size: 10px; color: #dc3545; margin-top: 4px;">緩衝事件: ${bufferCount}</div>` : ''}
+        <div style="font-size: 10px; color: #666; margin-top: 4px;">指標數: ${video.metricsCount || 0}</div>
+      </div>
+    `;
+  }).join('');
+  
+  historyContent.innerHTML = historyHtml;
+}
+
+function clearVideoHistory() {
+  chrome.runtime.sendMessage({ type: 'CLEAR_VIDEO_QUALITY_DATA' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Failed to clear video history:', chrome.runtime.lastError);
+      return;
+    }
+    
+    console.log('Video history cleared');
+    refreshVideoQuality();
+  });
+}
+
+// =============================================================================
+// 輔助函數
+// =============================================================================
+
+function formatBitrate(bitrate) {
+  if (bitrate >= 1000000) {
+    return `${(bitrate / 1000000).toFixed(1)} Mbps`;
+  } else if (bitrate >= 1000) {
+    return `${(bitrate / 1000).toFixed(0)} Kbps`;
+  } else {
+    return `${bitrate} bps`;
+  }
+}
+
+function formatTime(seconds) {
+  if (!seconds || seconds === 0) return '00:00';
+  
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  } else {
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+}
