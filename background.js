@@ -9,6 +9,11 @@ let tabDetectionData = {}; // 新增：按標籤頁分組的檢測資料
 let manifestMap = {}; // 儲存解析的 manifest 資料，按 tabId 分組
 let manifestRequestQueue = new Map(); // 處理中的 manifest 請求佇列
 
+// 新增：Media Segment Monitoring 系統 (Task 22.2)
+let mediaSegmentMap = {}; // 儲存媒體片段監控資料，按 tabId 分組
+let segmentDownloadTimes = {}; // 追蹤片段下載時間
+let segmentBandwidthData = {}; // 即時頻寬計算資料
+
 // 新增：日誌記錄函數
 function logMessage(message, level = 'info') {
   const timestamp = new Date().toISOString();
@@ -65,6 +70,26 @@ function getManifestType(url) {
   if (urlPath.endsWith('.mpd')) return 'DASH';
   if (urlPath.endsWith('.m3u8')) return 'HLS';
   return 'UNKNOWN';
+}
+
+// 新增：Media Segment 檔案檢測系統 (Task 22.2)
+function isMediaSegmentFile(url) {
+  const urlPath = url.split('?')[0].toLowerCase(); // 移除查詢參數並轉小寫
+  return urlPath.endsWith('.m4s') || 
+         urlPath.endsWith('.ts') || 
+         urlPath.endsWith('.m4a') || 
+         urlPath.endsWith('.m4v') ||
+         urlPath.includes('/segment') || // 常見的片段 URL 模式
+         urlPath.includes('/chunk');     // 常見的片段 URL 模式
+}
+
+function getMediaSegmentType(url) {
+  const urlPath = url.split('?')[0].toLowerCase();
+  if (urlPath.endsWith('.m4s') || urlPath.endsWith('.m4v')) return 'DASH_VIDEO';
+  if (urlPath.endsWith('.m4a')) return 'DASH_AUDIO';
+  if (urlPath.endsWith('.ts')) return 'HLS_SEGMENT';
+  if (urlPath.includes('/segment') || urlPath.includes('/chunk')) return 'GENERIC_SEGMENT';
+  return 'UNKNOWN_SEGMENT';
 }
 
 async function fetchManifestContent(url) {
@@ -349,6 +374,154 @@ async function processManifestFile(url, tabId) {
     logMessage(`Error processing manifest ${url}: ${error.message}`, 'error');
     manifestRequestQueue.delete(`${tabId}_${url}`);
     throw error;
+  }
+}
+
+// 新增：Media Segment 處理函數 (Task 22.2)
+function processMediaSegment(details) {
+  try {
+    const { url, tabId, requestId, fromCache, responseHeaders, statusCode } = details;
+    const segmentType = getMediaSegmentType(url);
+    const timestamp = Date.now();
+    
+    logMessage(`📺 Media segment detected: ${url.substring(0, 100)}... [${segmentType}] (Tab: ${tabId})`, 'info');
+    
+    // 初始化標籤頁的媒體片段資料
+    if (!mediaSegmentMap[tabId]) {
+      mediaSegmentMap[tabId] = {
+        tabId: tabId,
+        segments: [],
+        stats: {
+          totalSegments: 0,
+          totalBytes: 0,
+          totalDownloadTime: 0,
+          averageBandwidth: 0,
+          dashSegments: 0,
+          hlsSegments: 0,
+          failedSegments: 0,
+          cachedSegments: 0,
+          lastUpdated: timestamp
+        }
+      };
+    }
+    
+    // 獲取 Content-Length
+    const contentLengthHeader = responseHeaders?.find(header => 
+      header.name.toLowerCase() === 'content-length'
+    );
+    const contentLength = contentLengthHeader ? parseInt(contentLengthHeader.value, 10) : 0;
+    
+    // 計算下載時間
+    const requestKey = `${requestId}_${tabId}`;
+    const startTime = requestStartTimes[requestKey];
+    const downloadTime = startTime ? timestamp - startTime : 0;
+    
+    // 計算即時頻寬 (bytes per second)
+    let bandwidth = 0;
+    if (downloadTime > 0 && contentLength > 0) {
+      bandwidth = (contentLength * 1000) / downloadTime; // bytes/second
+    }
+    
+    // 建立片段資料物件
+    const segmentData = {
+      url: url,
+      segmentType: segmentType,
+      timestamp: timestamp,
+      requestId: requestId,
+      contentLength: contentLength,
+      downloadTime: downloadTime,
+      bandwidth: bandwidth,
+      statusCode: statusCode,
+      fromCache: fromCache || false,
+      headers: responseHeaders || []
+    };
+    
+    // 儲存片段資料
+    const tabData = mediaSegmentMap[tabId];
+    tabData.segments.push(segmentData);
+    
+    // 保持最近 200 個片段記錄
+    if (tabData.segments.length > 200) {
+      tabData.segments.splice(0, tabData.segments.length - 200);
+    }
+    
+    // 更新統計資料
+    updateMediaSegmentStats(tabId, segmentData);
+    
+    // 計算即時頻寬趨勢
+    updateBandwidthTrend(tabId, bandwidth, timestamp);
+    
+    logMessage(`Segment processed: ${contentLength} bytes, ${downloadTime}ms, ${Math.round(bandwidth/1024)} KB/s`, 'debug');
+    
+  } catch (error) {
+    logMessage(`Failed to process media segment: ${error.message}`, 'error');
+  }
+}
+
+function updateMediaSegmentStats(tabId, segmentData) {
+  const stats = mediaSegmentMap[tabId].stats;
+  
+  stats.totalSegments++;
+  stats.totalBytes += segmentData.contentLength || 0;
+  stats.totalDownloadTime += segmentData.downloadTime || 0;
+  stats.lastUpdated = segmentData.timestamp;
+  
+  // 計算平均頻寬
+  if (stats.totalDownloadTime > 0) {
+    stats.averageBandwidth = (stats.totalBytes * 1000) / stats.totalDownloadTime; // bytes/second
+  }
+  
+  // 統計不同類型的片段
+  if (segmentData.segmentType.includes('DASH')) {
+    stats.dashSegments++;
+  } else if (segmentData.segmentType.includes('HLS')) {
+    stats.hlsSegments++;
+  }
+  
+  // 統計失敗和快取的片段
+  if (segmentData.statusCode >= 400) {
+    stats.failedSegments++;
+  }
+  
+  if (segmentData.fromCache) {
+    stats.cachedSegments++;
+  }
+}
+
+function updateBandwidthTrend(tabId, bandwidth, timestamp) {
+  if (!segmentBandwidthData[tabId]) {
+    segmentBandwidthData[tabId] = {
+      samples: [],
+      recentAverage: 0,
+      peakBandwidth: 0,
+      minBandwidth: Infinity
+    };
+  }
+  
+  const trendData = segmentBandwidthData[tabId];
+  
+  // 只記錄有效的頻寬數據
+  if (bandwidth > 0) {
+    trendData.samples.push({
+      bandwidth: bandwidth,
+      timestamp: timestamp
+    });
+    
+    // 保持最近 50 個樣本
+    if (trendData.samples.length > 50) {
+      trendData.samples.splice(0, trendData.samples.length - 50);
+    }
+    
+    // 更新統計
+    trendData.peakBandwidth = Math.max(trendData.peakBandwidth, bandwidth);
+    trendData.minBandwidth = Math.min(trendData.minBandwidth, bandwidth);
+    
+    // 計算最近 10 個樣本的平均頻寬
+    const recentSamples = trendData.samples.slice(-10);
+    const totalBandwidth = recentSamples.reduce((sum, sample) => sum + sample.bandwidth, 0);
+    trendData.recentAverage = totalBandwidth / recentSamples.length;
+    
+    logMessage(`Bandwidth trend updated: Recent avg ${Math.round(trendData.recentAverage/1024)} KB/s, Peak ${Math.round(trendData.peakBandwidth/1024)} KB/s`, 'debug');
   }
 }
 
@@ -1581,6 +1754,93 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true; // 保持消息通道開放
         break;
         
+      // 新增：Media Segment 相關訊息處理 (Task 22.2)
+      case 'GET_MEDIA_SEGMENT_DATA':
+        const segmentTabId = message.tabId || tabId;
+        
+        if (segmentTabId && mediaSegmentMap[segmentTabId]) {
+          const segmentData = mediaSegmentMap[segmentTabId];
+          const bandwidthData = segmentBandwidthData[segmentTabId] || null;
+          
+          sendResponse({ 
+            success: true, 
+            data: {
+              segments: segmentData,
+              bandwidth: bandwidthData
+            },
+            timestamp: Date.now()
+          });
+        } else {
+          sendResponse({ 
+            success: false, 
+            error: 'No media segment data found for tab',
+            data: null 
+          });
+        }
+        break;
+        
+      case 'CLEAR_MEDIA_SEGMENT_DATA':
+        const clearSegmentTabId = message.tabId || tabId;
+        if (clearSegmentTabId) {
+          if (mediaSegmentMap[clearSegmentTabId]) {
+            delete mediaSegmentMap[clearSegmentTabId];
+          }
+          if (segmentBandwidthData[clearSegmentTabId]) {
+            delete segmentBandwidthData[clearSegmentTabId];
+          }
+          logMessage(`Cleared media segment data for tab ${clearSegmentTabId}`, 'info');
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'Invalid tab ID' });
+        }
+        break;
+        
+      case 'GET_MEDIA_SEGMENT_STATS':
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const activeTabId = tabs[0]?.id;
+          const stats = {
+            totalTabs: Object.keys(mediaSegmentMap).length,
+            activeTabData: activeTabId ? mediaSegmentMap[activeTabId] : null,
+            activeTabBandwidth: activeTabId ? segmentBandwidthData[activeTabId] : null,
+            activeTabId: activeTabId,
+            timestamp: Date.now()
+          };
+          
+          // 計算全域統計
+          let totalSegments = 0;
+          let totalBytes = 0;
+          let totalDashSegments = 0;
+          let totalHlsSegments = 0;
+          let totalFailedSegments = 0;
+          let totalCachedSegments = 0;
+          
+          Object.values(mediaSegmentMap).forEach(tabData => {
+            const tabStats = tabData.stats;
+            totalSegments += tabStats.totalSegments;
+            totalBytes += tabStats.totalBytes;
+            totalDashSegments += tabStats.dashSegments;
+            totalHlsSegments += tabStats.hlsSegments;
+            totalFailedSegments += tabStats.failedSegments;
+            totalCachedSegments += tabStats.cachedSegments;
+          });
+          
+          stats.summary = {
+            totalSegments,
+            totalBytes,
+            totalDashSegments,
+            totalHlsSegments,
+            totalFailedSegments,
+            totalCachedSegments,
+            averageSegmentSize: totalSegments > 0 ? Math.round(totalBytes / totalSegments) : 0
+          };
+          
+          logMessage(`Returning media segment stats: ${totalSegments} segments across ${stats.totalTabs} tabs`, 'debug');
+          sendResponse({ success: true, stats: stats });
+        });
+        
+        return true; // 保持消息通道開放
+        break;
+        
       default:
         // 未知消息類型
         logMessage(`Unknown message type: ${message.type}`, 'warn');
@@ -1661,6 +1921,19 @@ function startListening() {
         }
         
         const headers = details.responseHeaders || [];
+        
+        // 新增：檢測並處理媒體片段檔案 (Task 22.2)
+        if (isMediaSegmentFile(url)) {
+          // 處理媒體片段，計算頻寬和下載時間
+          processMediaSegment({
+            url: url,
+            tabId: tabId,
+            requestId: details.requestId,
+            fromCache: details.fromCache,
+            responseHeaders: headers,
+            statusCode: details.statusCode
+          });
+        }
         const cdnDetection = detectCDN(headers, url);
         
         // 新增：收集 Content-Length

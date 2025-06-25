@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task 22.2 - Media Segment Monitoring 測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007cba;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #007cba;
+            margin-top: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        .button {
+            background-color: #007cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        .button:hover {
+            background-color: #005a87;
+        }
+        .button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .data-display {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        video {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007cba;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .log-entry {
+            padding: 5px;
+            margin: 2px 0;
+            border-left: 3px solid #007cba;
+            background-color: #f1f3f4;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .segment-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .segment-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .segment-item:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .bandwidth-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .bandwidth-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Task 22.2 - Media Segment Monitoring 測試</h1>
+        <p>這個頁面用於測試 Chrome 擴展的媒體片段監控功能。</p>
+        
+        <div class="test-section">
+            <h2>🔗 擴展連接測試</h2>
+            <button class="button" onclick="testExtensionConnection()">測試擴展連接</button>
+            <div id="connectionStatus"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 媒體片段統計</h2>
+            <button class="button" onclick="getMediaSegmentStats()">獲取統計資料</button>
+            <button class="button" onclick="clearMediaSegmentData()">清除資料</button>
+            <div id="segmentStats"></div>
+            
+            <div class="stats-grid" id="statsGrid" style="display: none;">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalSegments">0</div>
+                    <div class="stat-label">總片段數</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalBytes">0</div>
+                    <div class="stat-label">總大小 (MB)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="dashSegments">0</div>
+                    <div class="stat-label">DASH 片段</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="hlsSegments">0</div>
+                    <div class="stat-label">HLS 片段</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="cachedSegments">0</div>
+                    <div class="stat-label">快取片段</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avgBandwidth">0</div>
+                    <div class="stat-label">平均頻寬 (KB/s)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>⚡ 即時頻寬監控</h2>
+            <button class="button" onclick="startBandwidthMonitoring()">開始監控</button>
+            <button class="button" onclick="stopBandwidthMonitoring()">停止監控</button>
+            
+            <div class="bandwidth-info" id="bandwidthInfo" style="display: none;">
+                <div class="bandwidth-card">
+                    <div style="font-size: 18px; font-weight: bold;" id="recentAvg">0 KB/s</div>
+                    <div style="font-size: 12px;">近期平均</div>
+                </div>
+                <div class="bandwidth-card">
+                    <div style="font-size: 18px; font-weight: bold;" id="peakBandwidth">0 KB/s</div>
+                    <div style="font-size: 12px;">峰值頻寬</div>
+                </div>
+                <div class="bandwidth-card">
+                    <div style="font-size: 18px; font-weight: bold;" id="minBandwidth">∞ KB/s</div>
+                    <div style="font-size: 12px;">最低頻寬</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>📋 片段詳細資料</h2>
+            <button class="button" onclick="getMediaSegmentData()">獲取片段資料</button>
+            <div id="segmentData"></div>
+            
+            <div class="segment-list" id="segmentList" style="display: none;">
+                <!-- 片段列表將在這裡顯示 -->
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎥 測試影片</h2>
+            <p>播放這些影片來觸發媒體片段檢測：</p>
+            
+            <div class="video-container">
+                <h3>DASH 測試影片</h3>
+                <video controls crossorigin="anonymous">
+                    <source src="https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd" type="application/dash+xml">
+                    您的瀏覽器不支援 DASH 播放。
+                </video>
+            </div>
+
+            <div class="video-container">
+                <h3>HLS 測試影片</h3>
+                <video controls crossorigin="anonymous">
+                    <source src="https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8" type="application/x-mpegURL">
+                    您的瀏覽器不支援 HLS 播放。
+                </video>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 測試日誌</h2>
+            <button class="button" onclick="clearTestLog()">清除日誌</button>
+            <div id="testLog" class="data-display" style="max-height: 200px;"></div>
+        </div>
+    </div>
+
+    <script>
+        let monitoringInterval = null;
+        
+        function logMessage(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            
+            const testLog = document.getElementById('testLog');
+            testLog.appendChild(logEntry);
+            testLog.scrollTop = testLog.scrollHeight;
+            
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function showStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        async function testExtensionConnection() {
+            try {
+                logMessage('測試擴展連接...', 'info');
+                
+                const response = await chrome.runtime.sendMessage({
+                    type: 'PING'
+                });
+                
+                if (response && response.status === 'ok') {
+                    showStatus('connectionStatus', `✅ 擴展連接成功！Extension ID: ${response.extensionId}`, 'success');
+                    logMessage('擴展連接測試成功', 'info');
+                } else {
+                    showStatus('connectionStatus', '❌ 擴展回應異常', 'error');
+                    logMessage('擴展回應異常', 'error');
+                }
+            } catch (error) {
+                showStatus('connectionStatus', `❌ 擴展連接失敗: ${error.message}`, 'error');
+                logMessage(`擴展連接失敗: ${error.message}`, 'error');
+            }
+        }
+
+        async function getMediaSegmentStats() {
+            try {
+                logMessage('獲取媒體片段統計...', 'info');
+                
+                const response = await chrome.runtime.sendMessage({
+                    type: 'GET_MEDIA_SEGMENT_STATS'
+                });
+                
+                if (response && response.success) {
+                    const stats = response.stats;
+                    showStatus('segmentStats', '✅ 統計資料獲取成功', 'success');
+                    
+                    // 更新統計卡片
+                    document.getElementById('totalSegments').textContent = stats.summary.totalSegments;
+                    document.getElementById('totalBytes').textContent = (stats.summary.totalBytes / (1024 * 1024)).toFixed(2);
+                    document.getElementById('dashSegments').textContent = stats.summary.totalDashSegments;
+                    document.getElementById('hlsSegments').textContent = stats.summary.totalHlsSegments;
+                    document.getElementById('cachedSegments').textContent = stats.summary.totalCachedSegments;
+                    
+                    // 計算平均頻寬
+                    const avgBandwidth = stats.activeTabData ? 
+                        Math.round(stats.activeTabData.stats.averageBandwidth / 1024) : 0;
+                    document.getElementById('avgBandwidth').textContent = avgBandwidth;
+                    
+                    document.getElementById('statsGrid').style.display = 'grid';
+                    
+                    logMessage(`統計: ${stats.summary.totalSegments} 片段, ${stats.totalTabs} 標籤頁`, 'info');
+                } else {
+                    showStatus('segmentStats', `❌ 獲取統計失敗: ${response?.error || '未知錯誤'}`, 'error');
+                    logMessage(`獲取統計失敗: ${response?.error || '未知錯誤'}`, 'error');
+                }
+            } catch (error) {
+                showStatus('segmentStats', `❌ 請求失敗: ${error.message}`, 'error');
+                logMessage(`請求失敗: ${error.message}`, 'error');
+            }
+        }
+
+        async function clearMediaSegmentData() {
+            try {
+                logMessage('清除媒體片段資料...', 'info');
+                
+                const response = await chrome.runtime.sendMessage({
+                    type: 'CLEAR_MEDIA_SEGMENT_DATA'
+                });
+                
+                if (response && response.success) {
+                    showStatus('segmentStats', '✅ 資料清除成功', 'success');
+                    logMessage('媒體片段資料已清除', 'info');
+                    
+                    // 重置顯示
+                    document.getElementById('statsGrid').style.display = 'none';
+                    document.getElementById('segmentList').style.display = 'none';
+                    document.getElementById('bandwidthInfo').style.display = 'none';
+                } else {
+                    showStatus('segmentStats', `❌ 清除失敗: ${response?.error || '未知錯誤'}`, 'error');
+                    logMessage(`清除失敗: ${response?.error || '未知錯誤'}`, 'error');
+                }
+            } catch (error) {
+                showStatus('segmentStats', `❌ 請求失敗: ${error.message}`, 'error');
+                logMessage(`請求失敗: ${error.message}`, 'error');
+            }
+        }
+
+        async function getMediaSegmentData() {
+            try {
+                logMessage('獲取媒體片段詳細資料...', 'info');
+                
+                const response = await chrome.runtime.sendMessage({
+                    type: 'GET_MEDIA_SEGMENT_DATA'
+                });
+                
+                if (response && response.success) {
+                    const data = response.data;
+                    showStatus('segmentData', '✅ 片段資料獲取成功', 'success');
+                    
+                    // 顯示片段列表
+                    const segmentList = document.getElementById('segmentList');
+                    segmentList.innerHTML = '';
+                    
+                    if (data.segments && data.segments.segments.length > 0) {
+                        data.segments.segments.slice(-20).forEach((segment, index) => {
+                            const segmentItem = document.createElement('div');
+                            segmentItem.className = 'segment-item';
+                            
+                            const downloadTime = segment.downloadTime || 0;
+                            const bandwidth = segment.bandwidth ? Math.round(segment.bandwidth / 1024) : 0;
+                            const size = segment.contentLength ? Math.round(segment.contentLength / 1024) : 0;
+                            
+                            segmentItem.innerHTML = `
+                                <strong>[${segment.segmentType}]</strong> 
+                                ${segment.url.substring(0, 80)}...<br>
+                                📊 大小: ${size} KB | ⏱️ 時間: ${downloadTime}ms | 
+                                ⚡ 頻寬: ${bandwidth} KB/s | 
+                                💾 快取: ${segment.fromCache ? '是' : '否'}
+                            `;
+                            segmentList.appendChild(segmentItem);
+                        });
+                        
+                        segmentList.style.display = 'block';
+                        logMessage(`顯示最近 ${Math.min(20, data.segments.segments.length)} 個片段`, 'info');
+                    } else {
+                        segmentList.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">尚無媒體片段資料</div>';
+                        segmentList.style.display = 'block';
+                        logMessage('目前沒有媒體片段資料', 'info');
+                    }
+                } else {
+                    showStatus('segmentData', `❌ 獲取資料失敗: ${response?.error || '未知錯誤'}`, 'error');
+                    logMessage(`獲取資料失敗: ${response?.error || '未知錯誤'}`, 'error');
+                }
+            } catch (error) {
+                showStatus('segmentData', `❌ 請求失敗: ${error.message}`, 'error');
+                logMessage(`請求失敗: ${error.message}`, 'error');
+            }
+        }
+
+        async function updateBandwidthDisplay() {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: 'GET_MEDIA_SEGMENT_DATA'
+                });
+                
+                if (response && response.success && response.data.bandwidth) {
+                    const bandwidth = response.data.bandwidth;
+                    
+                    document.getElementById('recentAvg').textContent = 
+                        Math.round(bandwidth.recentAverage / 1024) + ' KB/s';
+                    document.getElementById('peakBandwidth').textContent = 
+                        Math.round(bandwidth.peakBandwidth / 1024) + ' KB/s';
+                    document.getElementById('minBandwidth').textContent = 
+                        bandwidth.minBandwidth !== Infinity ? 
+                        Math.round(bandwidth.minBandwidth / 1024) + ' KB/s' : '∞ KB/s';
+                    
+                    document.getElementById('bandwidthInfo').style.display = 'grid';
+                }
+            } catch (error) {
+                // 靜默處理錯誤，避免干擾監控
+            }
+        }
+
+        function startBandwidthMonitoring() {
+            if (monitoringInterval) {
+                logMessage('頻寬監控已在運行', 'info');
+                return;
+            }
+            
+            logMessage('開始即時頻寬監控...', 'info');
+            monitoringInterval = setInterval(updateBandwidthDisplay, 2000);
+            updateBandwidthDisplay(); // 立即更新一次
+        }
+
+        function stopBandwidthMonitoring() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+                logMessage('頻寬監控已停止', 'info');
+            }
+        }
+
+        function clearTestLog() {
+            document.getElementById('testLog').innerHTML = '';
+        }
+
+        // 頁面載入時自動測試連接
+        window.addEventListener('load', () => {
+            logMessage('Task 22.2 測試頁面已載入', 'info');
+            setTimeout(testExtensionConnection, 1000);
+        });
+
+        // 定期更新統計（如果有監控在運行）
+        setInterval(() => {
+            if (monitoringInterval) {
+                getMediaSegmentStats();
+            }
+        }, 5000);
+    </script>
+</body>
+</html> 
