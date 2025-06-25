@@ -5,6 +5,10 @@ let requestStartTimes = {}; // 新增：追蹤請求開始時間
 let currentTabId = null; // 新增：當前活躍標籤頁 ID
 let tabDetectionData = {}; // 新增：按標籤頁分組的檢測資料
 
+// 新增：Manifest 攔截與解析系統
+let manifestMap = {}; // 儲存解析的 manifest 資料，按 tabId 分組
+let manifestRequestQueue = new Map(); // 處理中的 manifest 請求佇列
+
 // 新增：日誌記錄函數
 function logMessage(message, level = 'info') {
   const timestamp = new Date().toISOString();
@@ -47,6 +51,304 @@ function getDomain(url) {
     return new URL(url).hostname;
   } catch (e) {
     return 'Unknown';
+  }
+}
+
+// 新增：Manifest 檔案檢測與解析系統
+function isManifestFile(url) {
+  const urlPath = url.split('?')[0]; // 移除查詢參數
+  return urlPath.endsWith('.mpd') || urlPath.endsWith('.m3u8');
+}
+
+function getManifestType(url) {
+  const urlPath = url.split('?')[0];
+  if (urlPath.endsWith('.mpd')) return 'DASH';
+  if (urlPath.endsWith('.m3u8')) return 'HLS';
+  return 'UNKNOWN';
+}
+
+async function fetchManifestContent(url) {
+  try {
+    logMessage(`Fetching manifest: ${url}`, 'debug');
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+    
+    logMessage(`Manifest fetched successfully: ${text.length} characters`, 'debug');
+    return { text, contentType };
+    
+  } catch (error) {
+    logMessage(`Failed to fetch manifest ${url}: ${error.message}`, 'error');
+    throw error;
+  }
+}
+
+function parseDashManifest(manifestText, baseUrl) {
+  try {
+    logMessage('Starting DASH manifest parsing with regex-based parser', 'debug');
+    
+    // 在 Service Worker 中使用正則表達式解析 XML，因為 DOMParser 不可用
+    
+    const manifestData = {
+      type: 'DASH',
+      baseUrl: baseUrl,
+      representations: [],
+      segments: [],
+      drmProtection: false,
+      parseTime: Date.now()
+    };
+    
+    // 檢查 DRM 保護 - 使用正則表達式
+    const contentProtectionRegex = /<ContentProtection[^>]*>/gi;
+    const contentProtectionMatches = manifestText.match(contentProtectionRegex);
+    manifestData.drmProtection = contentProtectionMatches && contentProtectionMatches.length > 0;
+    
+    if (manifestData.drmProtection) {
+      logMessage(`🔒 DRM Protection detected: ${contentProtectionMatches.length} ContentProtection elements`, 'info');
+    }
+    
+    // 解析 Representation 元素 - 使用正則表達式
+    const representationRegex = /<Representation[^>]*>/gi;
+    const representationMatches = manifestText.match(representationRegex);
+    
+    if (representationMatches) {
+      representationMatches.forEach((repMatch, index) => {
+        // 提取屬性
+        const idMatch = repMatch.match(/id="([^"]*)"/i);
+        const bandwidthMatch = repMatch.match(/bandwidth="([^"]*)"/i);
+        const widthMatch = repMatch.match(/width="([^"]*)"/i);
+        const heightMatch = repMatch.match(/height="([^"]*)"/i);
+        const mimeTypeMatch = repMatch.match(/mimeType="([^"]*)"/i);
+        
+        const id = idMatch ? idMatch[1] : `rep_${index}`;
+        const bandwidth = bandwidthMatch ? parseInt(bandwidthMatch[1], 10) : 0;
+        const width = widthMatch ? parseInt(widthMatch[1], 10) : 0;
+        const height = heightMatch ? parseInt(heightMatch[1], 10) : 0;
+        const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : '';
+        
+        // 計算解析度標籤
+        let resolution = 'unknown';
+        if (width && height) {
+          resolution = `${width}x${height}`;
+          // 標準解析度對應
+          if (height <= 240) resolution += ' (240p)';
+          else if (height <= 360) resolution += ' (360p)';
+          else if (height <= 480) resolution += ' (480p)';
+          else if (height <= 720) resolution += ' (720p)';
+          else if (height <= 1080) resolution += ' (1080p)';
+          else if (height <= 1440) resolution += ' (1440p)';
+          else if (height <= 2160) resolution += ' (4K)';
+          else resolution += ' (8K+)';
+        }
+        
+        manifestData.representations.push({
+          id,
+          bandwidth,
+          width,
+          height,
+          resolution,
+          mimeType,
+          bitrate: Math.round(bandwidth / 1000) // kbps
+        });
+      });
+      
+      // 簡化的段落解析 - 查找 SegmentTemplate 或 SegmentList
+      const segmentTemplateRegex = /<SegmentTemplate[^>]*media="([^"]*)"[^>]*>/gi;
+      const segmentTemplateMatches = manifestText.match(segmentTemplateRegex);
+      
+      if (segmentTemplateMatches) {
+        segmentTemplateMatches.forEach(match => {
+          const mediaMatch = match.match(/media="([^"]*)"/i);
+          if (mediaMatch) {
+            manifestData.segments.push({
+              template: mediaMatch[1],
+              type: 'template'
+            });
+          }
+        });
+      }
+    }
+    
+    logMessage(`DASH manifest parsed: ${manifestData.representations.length} representations, DRM: ${manifestData.drmProtection}`, 'info');
+    return manifestData;
+    
+  } catch (error) {
+    logMessage(`Failed to parse DASH manifest: ${error.message}`, 'error');
+    throw error;
+  }
+}
+
+function parseHlsManifest(manifestText, baseUrl) {
+  try {
+    const lines = manifestText.split('\n').map(line => line.trim()).filter(line => line);
+    
+    const manifestData = {
+      type: 'HLS',
+      baseUrl: baseUrl,
+      representations: [],
+      segments: [],
+      drmProtection: false,
+      parseTime: Date.now()
+    };
+    
+    let currentStream = null;
+    let isMainPlaylist = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // 檢查是否為主播放列表
+      if (line.startsWith('#EXT-X-STREAM-INF:')) {
+        isMainPlaylist = true;
+        const attributes = parseHlsAttributes(line);
+        
+        currentStream = {
+          bandwidth: parseInt(attributes.BANDWIDTH) || 0,
+          resolution: attributes.RESOLUTION || 'unknown',
+          codecs: attributes.CODECS || '',
+          bitrate: Math.round((parseInt(attributes.BANDWIDTH) || 0) / 1000)
+        };
+        
+        // 解析解析度
+        if (attributes.RESOLUTION) {
+          const [width, height] = attributes.RESOLUTION.split('x').map(Number);
+          currentStream.width = width;
+          currentStream.height = height;
+          
+          // 標準解析度標籤
+          let resolutionLabel = attributes.RESOLUTION;
+          if (height <= 240) resolutionLabel += ' (240p)';
+          else if (height <= 360) resolutionLabel += ' (360p)';
+          else if (height <= 480) resolutionLabel += ' (480p)';
+          else if (height <= 720) resolutionLabel += ' (720p)';
+          else if (height <= 1080) resolutionLabel += ' (1080p)';
+          else if (height <= 1440) resolutionLabel += ' (1440p)';
+          else if (height <= 2160) resolutionLabel += ' (4K)';
+          else resolutionLabel += ' (8K+)';
+          
+          currentStream.resolution = resolutionLabel;
+        }
+        
+      } else if (currentStream && !line.startsWith('#')) {
+        // 這是 stream URL
+        currentStream.url = line;
+        currentStream.id = `stream_${manifestData.representations.length}`;
+        manifestData.representations.push(currentStream);
+        currentStream = null;
+      }
+      
+      // 檢查 DRM 保護
+      if (line.startsWith('#EXT-X-KEY:')) {
+        manifestData.drmProtection = true;
+      }
+      
+      // 檢查媒體片段（如果是媒體播放列表）
+      if (line.startsWith('#EXTINF:')) {
+        const nextLine = lines[i + 1];
+        if (nextLine && !nextLine.startsWith('#')) {
+          manifestData.segments.push({
+            duration: parseFloat(line.split(':')[1]),
+            url: nextLine
+          });
+          i++; // 跳過下一行，因為已經處理了
+        }
+      }
+    }
+    
+    // 如果沒有找到 stream 資訊，可能是媒體播放列表
+    if (!isMainPlaylist && manifestData.segments.length > 0) {
+      manifestData.representations.push({
+        id: 'default',
+        bandwidth: 0,
+        resolution: 'unknown',
+        url: baseUrl
+      });
+    }
+    
+    logMessage(`HLS manifest parsed: ${manifestData.representations.length} streams, ${manifestData.segments.length} segments, DRM: ${manifestData.drmProtection}`, 'info');
+    return manifestData;
+    
+  } catch (error) {
+    logMessage(`Failed to parse HLS manifest: ${error.message}`, 'error');
+    throw error;
+  }
+}
+
+function parseHlsAttributes(line) {
+  const attributes = {};
+  const attributeString = line.split(':')[1];
+  
+  // 簡單的屬性解析（處理引號內的值）
+  const regex = /([A-Z-]+)=([^,]+|"[^"]*")/g;
+  let match;
+  
+  while ((match = regex.exec(attributeString)) !== null) {
+    let value = match[2];
+    if (value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1); // 移除引號
+    }
+    attributes[match[1]] = value;
+  }
+  
+  return attributes;
+}
+
+async function processManifestFile(url, tabId) {
+  try {
+    // 檢查是否已經在處理中
+    const requestKey = `${tabId}_${url}`;
+    if (manifestRequestQueue.has(requestKey)) {
+      logMessage(`Manifest already being processed: ${url}`, 'debug');
+      return;
+    }
+    
+    manifestRequestQueue.set(requestKey, true);
+    
+    const manifestType = getManifestType(url);
+    logMessage(`Processing ${manifestType} manifest: ${url}`, 'info');
+    
+    // 獲取 manifest 內容
+    const { text } = await fetchManifestContent(url);
+    
+    // 解析 manifest
+    let manifestData;
+    if (manifestType === 'DASH') {
+      manifestData = parseDashManifest(text, url);
+    } else if (manifestType === 'HLS') {
+      manifestData = parseHlsManifest(text, url);
+    } else {
+      throw new Error(`Unsupported manifest type: ${manifestType}`);
+    }
+    
+    // 初始化標籤頁的 manifest 資料
+    if (!manifestMap[tabId]) {
+      manifestMap[tabId] = {
+        tabId: tabId,
+        manifests: {},
+        lastUpdated: Date.now()
+      };
+    }
+    
+    // 儲存解析結果
+    manifestMap[tabId].manifests[url] = manifestData;
+    manifestMap[tabId].lastUpdated = Date.now();
+    
+    logMessage(`Manifest processed and stored for tab ${tabId}: ${url}`, 'info');
+    
+    // 移除處理佇列
+    manifestRequestQueue.delete(requestKey);
+    
+    return manifestData;
+    
+  } catch (error) {
+    logMessage(`Error processing manifest ${url}: ${error.message}`, 'error');
+    manifestRequestQueue.delete(`${tabId}_${url}`);
+    throw error;
   }
 }
 
@@ -985,8 +1287,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab ? sender.tab.id : null;
     
     // CDN 檢測相關消息
-    if (message.type === 'ping') {
-      sendResponse({ type: 'pong', status: 'ok' });
+    if (message.type === 'ping' || message.type === 'PING') {
+      sendResponse({ type: 'pong', status: 'ok', extensionId: chrome.runtime.id });
       return;
     }
     
@@ -1209,6 +1511,76 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return; // 立即返回，不需要保持通道開放
         
+      // 新增：Manifest 相關訊息處理
+      case 'GET_MANIFEST_DATA':
+        const manifestTabId = message.tabId || tabId;
+        
+        if (manifestTabId && manifestMap[manifestTabId]) {
+          const manifestData = manifestMap[manifestTabId];
+          sendResponse({ 
+            success: true, 
+            data: manifestData,
+            timestamp: Date.now()
+          });
+        } else {
+          sendResponse({ 
+            success: false, 
+            error: 'No manifest data found for tab',
+            data: null 
+          });
+        }
+        break;
+        
+      case 'CLEAR_MANIFEST_DATA':
+        const clearManifestTabId = message.tabId || tabId;
+        if (clearManifestTabId && manifestMap[clearManifestTabId]) {
+          delete manifestMap[clearManifestTabId];
+          logMessage(`Cleared manifest data for tab ${clearManifestTabId}`, 'info');
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'No manifest data to clear' });
+        }
+        break;
+        
+      case 'GET_MANIFEST_STATS':
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const activeTabId = tabs[0]?.id;
+          const stats = {
+            totalTabs: Object.keys(manifestMap).length,
+            activeTabData: activeTabId ? manifestMap[activeTabId] : null,
+            activeTabId: activeTabId,
+            timestamp: Date.now()
+          };
+          
+          // 計算總 manifest 數量
+          let totalManifests = 0;
+          let dashCount = 0;
+          let hlsCount = 0;
+          let drmCount = 0;
+          
+          Object.values(manifestMap).forEach(tabData => {
+            Object.values(tabData.manifests).forEach(manifest => {
+              totalManifests++;
+              if (manifest.type === 'DASH') dashCount++;
+              if (manifest.type === 'HLS') hlsCount++;
+              if (manifest.drmProtection) drmCount++;
+            });
+          });
+          
+          stats.summary = {
+            totalManifests,
+            dashCount,
+            hlsCount,
+            drmCount
+          };
+          
+          logMessage(`Returning manifest stats: ${totalManifests} manifests across ${stats.totalTabs} tabs`, 'debug');
+          sendResponse({ success: true, stats: stats });
+        });
+        
+        return true; // 保持消息通道開放
+        break;
+        
       default:
         // 未知消息類型
         logMessage(`Unknown message type: ${message.type}`, 'warn');
@@ -1278,6 +1650,15 @@ function startListening() {
         }
         
         logMessage(`Checking resource: ${url.substring(0, 100)}... [${resourceType}] from ${domain} (Tab: ${tabId})`, 'debug');
+        
+        // 新增：檢測並處理 manifest 檔案
+        if (isManifestFile(url)) {
+          logMessage(`🎬 Manifest file detected: ${url}`, 'info');
+          // 異步處理 manifest，避免阻塞主要的 CDN 檢測流程
+          processManifestFile(url, tabId).catch(error => {
+            logMessage(`Manifest processing failed: ${error.message}`, 'error');
+          });
+        }
         
         const headers = details.responseHeaders || [];
         const cdnDetection = detectCDN(headers, url);

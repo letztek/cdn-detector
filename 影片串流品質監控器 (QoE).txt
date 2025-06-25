@@ -1,0 +1,45 @@
+## 總體目標
+
+設計並規劃一個基於 Manifest V3 的 Chrome 擴充功能，用於全面、深入地監控使用者觀看的線上影片的服務品質 (Quality of Experience, QoE)。此專案需要實現從基礎到進階的共 7 項關鍵 QoE 指標。
+
+## 需實現的完整 QoE 指標與技術規劃
+
+### --- 深度解析指標 ---
+
+**0. 抓到是不是串流
+
+**1. 即時串流解析度 (Current Stream Resolution)**
+    * **思路**：
+        1.  **攔截與解析 Manifest**：在 `background.js` 中攔截 `.mpd`/`.m3u8` 請求，`fetch` 其內容並解析，建立一個從「媒體路徑」到「解析度/頻寬」的對應地圖 (`manifestMap`)。
+        2.  **關聯媒體區段**：監聽 `.m4s`/`.ts` 區段請求，將其 URL 與 `manifestMap` 進行匹配。
+        3.  **更新狀態**：匹配成功後，更新當前分頁的 `currentStreamResolution` 狀態。
+
+**2. DRM 保護狀態 (DRM Status)**
+    * **思路**：在解析 `.mpd` 檔案時，檢查 XML 中是否存在 `<ContentProtection>` 標籤。若存在，則標記 `isDrmProtected: true`，反之為 `false`。
+
+### --- 核心體驗指標 ---
+
+**3. 影片啟動時間 (Video Startup Time)**
+    * **思路**：
+        * `content_script`：監聽 `play` 事件，記錄「意圖播放時間戳」，並立即發送給 `background.js`。
+        * `background_script`：接收到「意圖播放」訊息後開始計時。當 `webRequest` 監聽到**第一個**媒體區段下載**完成**時，停止計時。兩者的時間差即為啟動時間。
+
+**4. 再緩衝比率 (Rebuffering Percentage)**
+    * **思路**：
+        * `content_script`：監聽 `<video>` 的 `waiting` (緩衝開始) 和 `playing` (緩衝結束) 事件。**使用 `seeking` 和 `seeked` 事件來判斷，以排除使用者手動拖動進度條造成的 `waiting`**。將每次的緩衝時長發送給 `background.js`。
+        * `background_script`：累加來自 `content_script` 的總緩衝時長，並根據 `content_script` 定期回報的總觀看時長，計算出 `(總緩衝時長 / 總觀看時長) * 100%`。
+
+**5. 影片位元率 (Video Bitrate) & 即時頻寬 (Bandwidth)**
+    * **思路**：
+        * **串流位元率 (來自 Manifest)**：當媒體區段請求成功匹配到 `manifestMap` 中的某個 `<Representation>` 時，直接讀取其 `bandwidth` 屬性。這是影片編碼時設定的「官方位元率」。
+        * **即時下載頻寬 (實際網速)**：在媒體區段請求的 `onCompleted` 事件中，用 `Content-Length` (檔案大小) 除以下載耗時，計算出使用者當時的「實際下載速度」。
+        * **洞察**：同時顯示這兩個值，可以清晰地看出使用者的網速是否能支撐其所觀看的畫質。
+
+**6. 錯誤率 (Error Rate) & 啟動失敗 (Start Failures)**
+    * **思路**：
+        * `background_script`：使用 `webRequest.onErrorOccurred` 監聽媒體檔案下載失敗 (如 HTTP 404/503)，計為網路層錯誤。
+        * `content_script`：監聽 `<video>` 元素的 `error` 事件，計為播放器層錯誤。
+        * **啟動失敗**：當 `content_script` 發出「意圖播放」訊號後，若在指定時間內（如 60 秒）`background.js` 未能偵測到任何成功的媒體區段下載，也未收到播放器層的嚴重錯誤，即可判定為一次啟動失敗（可能為超時）。
+
+**7. 下載數據量 (Data Downloaded)**
+    * **思路**：在 `background_script` 中，累加所有監聽到的影片/音訊媒體區段請求的 `Content-Length`。

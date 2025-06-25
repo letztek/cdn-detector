@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manifest 解析功能測試</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+        }
+        .test-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #5a6fd8;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 3px;
+            white-space: pre-wrap;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success { background: #d4edda; border-left: 4px solid #28a745; }
+        .error { background: #f8d7da; border-left: 4px solid #dc3545; }
+        .info { background: #d1ecf1; border-left: 4px solid #17a2b8; }
+        h1 { color: #333; }
+        h2 { color: #667eea; }
+        .status { 
+            display: inline-block; 
+            padding: 2px 8px; 
+            border-radius: 3px; 
+            font-size: 12px; 
+            font-weight: bold;
+        }
+        .status.detected { background: #28a745; color: white; }
+        .status.not-detected { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Manifest 解析功能測試</h1>
+        <p>此頁面用於測試 CDN Detector 擴充功能的 Manifest 攔截與解析功能。</p>
+    </div>
+
+    <div class="container">
+        <div class="test-section">
+            <h2>1. 擴充功能狀態檢查</h2>
+            <button class="test-button" onclick="checkExtensionStatus()">檢查擴充功能</button>
+            <div id="extension-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. Manifest 統計資訊</h2>
+            <button class="test-button" onclick="getManifestStats()">獲取統計資訊</button>
+            <div id="stats-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. 測試 DASH Manifest (.mpd)</h2>
+            <p>載入一個範例 DASH manifest 檔案來測試解析功能：</p>
+            <button class="test-button" onclick="testDashManifest()">測試 DASH 解析</button>
+            <div id="dash-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>4. 測試 HLS Manifest (.m3u8)</h2>
+            <p>載入一個範例 HLS manifest 檔案來測試解析功能：</p>
+            <button class="test-button" onclick="testHlsManifest()">測試 HLS 解析</button>
+            <div id="hls-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>5. 清除 Manifest 資料</h2>
+            <button class="test-button" onclick="clearManifestData()">清除資料</button>
+            <div id="clear-result" class="result"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>📋 測試指南</h2>
+        <ol>
+            <li><strong>安裝擴充功能</strong>：確保 CDN Detector 擴充功能已在 Chrome 中載入</li>
+            <li><strong>檢查狀態</strong>：點擊「檢查擴充功能」確認通訊正常</li>
+            <li><strong>測試解析</strong>：點擊測試按鈕載入範例 manifest 檔案</li>
+            <li><strong>查看結果</strong>：在結果區域查看解析的詳細資訊</li>
+            <li><strong>檢查日誌</strong>：開啟 Chrome DevTools Console 查看詳細日誌</li>
+        </ol>
+        
+        <h3>🔍 如何查看詳細日誌：</h3>
+        <ol>
+            <li>按 F12 或右鍵選擇「檢查」開啟 DevTools</li>
+            <li>切換到「Console」標籤</li>
+            <li>尋找以 "🎬 Manifest file detected" 開頭的日誌</li>
+            <li>查看 manifest 解析的詳細過程</li>
+        </ol>
+    </div>
+
+    <script>
+        // 檢查擴充功能狀態
+        async function checkExtensionStatus() {
+            const resultDiv = document.getElementById('extension-result');
+            resultDiv.textContent = '檢查中...';
+            
+            try {
+                if (typeof chrome === 'undefined' || !chrome.runtime) {
+                    throw new Error('Chrome 擴充功能 API 不可用');
+                }
+                
+                const response = await sendMessage({ type: 'GET_DETECTION_STATUS' });
+                
+                if (response.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ 擴充功能正常運作
+狀態：${response.enabled ? '啟用' : '停用'}
+檢測中的標籤頁：${response.tabCount || 0} 個
+時間戳：${new Date(response.timestamp).toLocaleString()}`;
+                } else {
+                    throw new Error(response.error || '未知錯誤');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ 錯誤：${error.message}
+                
+請確認：
+1. CDN Detector 擴充功能已安裝並啟用
+2. 此頁面可以與擴充功能通訊
+3. 檢查 Chrome 擴充功能權限設定`;
+            }
+        }
+
+        // 獲取 Manifest 統計資訊
+        async function getManifestStats() {
+            const resultDiv = document.getElementById('stats-result');
+            resultDiv.textContent = '獲取統計資訊中...';
+            
+            try {
+                const response = await sendMessage({ type: 'GET_MANIFEST_STATS' });
+                
+                if (response.success) {
+                    const stats = response.stats;
+                    resultDiv.className = 'result info';
+                    resultDiv.textContent = `📊 Manifest 統計資訊：
+
+總標籤頁數：${stats.totalTabs}
+目前標籤頁 ID：${stats.activeTabId}
+總 Manifest 數：${stats.summary.totalManifests}
+DASH 檔案：${stats.summary.dashCount}
+HLS 檔案：${stats.summary.hlsCount}
+DRM 保護：${stats.summary.drmCount}
+更新時間：${new Date(stats.timestamp).toLocaleString()}
+
+${stats.activeTabData ? 
+    `目前標籤頁資料：
+- Manifest 數量：${Object.keys(stats.activeTabData.manifests).length}
+- 最後更新：${new Date(stats.activeTabData.lastUpdated).toLocaleString()}` 
+    : '目前標籤頁無 Manifest 資料'}`;
+                } else {
+                    throw new Error(response.error || '獲取統計資訊失敗');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ 錯誤：${error.message}`;
+            }
+        }
+
+        // 測試 DASH Manifest
+        async function testDashManifest() {
+            const resultDiv = document.getElementById('dash-result');
+            resultDiv.textContent = '載入 DASH manifest 測試中...';
+            
+            try {
+                // 創建一個範例 DASH manifest URL（實際上會觸發擴充功能的攔截）
+                const testUrl = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd';
+                
+                // 嘗試載入 manifest（這會觸發 webRequest 監聽器）
+                const response = await fetch(testUrl, { method: 'HEAD' });
+                
+                resultDiv.className = 'result info';
+                resultDiv.textContent = `🎯 DASH Manifest 測試：
+
+測試 URL：${testUrl}
+HTTP 狀態：${response.status} ${response.statusText}
+Content-Type：${response.headers.get('content-type') || 'N/A'}
+
+⏳ 請等待 2-3 秒，然後點擊「獲取統計資訊」查看解析結果
+💡 同時檢查 Chrome Console 查看詳細的解析日誌`;
+
+                // 等待一下讓擴充功能處理
+                setTimeout(() => {
+                    resultDiv.textContent += '\n\n✅ 測試完成，請點擊「獲取統計資訊」查看結果';
+                }, 2000);
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ DASH 測試錯誤：${error.message}
+                
+這可能是因為：
+1. 網路連線問題
+2. CORS 政策限制
+3. 測試 URL 不可用
+
+請檢查 Chrome Console 查看擴充功能是否檢測到 manifest 檔案`;
+            }
+        }
+
+        // 測試 HLS Manifest
+        async function testHlsManifest() {
+            const resultDiv = document.getElementById('hls-result');
+            resultDiv.textContent = '載入 HLS manifest 測試中...';
+            
+            try {
+                // 創建一個範例 HLS manifest URL
+                const testUrl = 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8';
+                
+                // 嘗試載入 manifest
+                const response = await fetch(testUrl, { method: 'HEAD' });
+                
+                resultDiv.className = 'result info';
+                resultDiv.textContent = `🎯 HLS Manifest 測試：
+
+測試 URL：${testUrl}
+HTTP 狀態：${response.status} ${response.statusText}
+Content-Type：${response.headers.get('content-type') || 'N/A'}
+
+⏳ 請等待 2-3 秒，然後點擊「獲取統計資訊」查看解析結果
+💡 同時檢查 Chrome Console 查看詳細的解析日誌`;
+
+                setTimeout(() => {
+                    resultDiv.textContent += '\n\n✅ 測試完成，請點擊「獲取統計資訊」查看結果';
+                }, 2000);
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ HLS 測試錯誤：${error.message}
+                
+這可能是因為：
+1. 網路連線問題
+2. CORS 政策限制  
+3. 測試 URL 不可用
+
+請檢查 Chrome Console 查看擴充功能是否檢測到 manifest 檔案`;
+            }
+        }
+
+        // 清除 Manifest 資料
+        async function clearManifestData() {
+            const resultDiv = document.getElementById('clear-result');
+            resultDiv.textContent = '清除資料中...';
+            
+            try {
+                const response = await sendMessage({ type: 'CLEAR_MANIFEST_DATA' });
+                
+                if (response.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = '✅ Manifest 資料已清除';
+                } else {
+                    throw new Error(response.error || '清除失敗');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ 清除錯誤：${error.message}`;
+            }
+        }
+
+        // 擴充功能 ID（需要動態獲取）
+        let extensionId = null;
+        
+        // 發送訊息到擴充功能
+        function sendMessage(message) {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome === 'undefined' || !chrome.runtime) {
+                    reject(new Error('Chrome runtime API 不可用'));
+                    return;
+                }
+                
+                // 如果沒有擴充功能 ID，嘗試獲取
+                if (!extensionId) {
+                    // 嘗試從已知的方式獲取 ID
+                    tryGetExtensionId().then(id => {
+                        if (id) {
+                            extensionId = id;
+                            sendMessageWithId(message, resolve, reject);
+                        } else {
+                            reject(new Error('無法獲取擴充功能 ID。請確認 CDN Detector 已安裝並啟用。'));
+                        }
+                    }).catch(error => {
+                        reject(new Error('獲取擴充功能 ID 失敗：' + error.message));
+                    });
+                } else {
+                    sendMessageWithId(message, resolve, reject);
+                }
+            });
+        }
+        
+        function sendMessageWithId(message, resolve, reject) {
+            chrome.runtime.sendMessage(extensionId, message, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                } else {
+                    resolve(response || {});
+                }
+            });
+        }
+        
+        // 嘗試獲取擴充功能 ID
+        async function tryGetExtensionId() {
+            try {
+                // 方法1：嘗試通過 chrome.management API
+                if (chrome.management) {
+                    const extensions = await new Promise((resolve) => {
+                        chrome.management.getAll(resolve);
+                    });
+                    const cdnDetector = extensions.find(ext => 
+                        ext.name.includes('CDN Detector') && ext.enabled
+                    );
+                    if (cdnDetector) {
+                        return cdnDetector.id;
+                    }
+                }
+                
+                // 方法2：嘗試一些常見的開發模式 ID
+                const commonDevIds = [
+                    'aeoldapcjkjnpkmcjlgfpbfbcjdlcidc', // 常見的開發模式 ID
+                    'kmendfapggjehodndflmmgagdbamhnfd',
+                    'fmkadmapgofadopljbjfkapdkoienihi'
+                ];
+                
+                for (const id of commonDevIds) {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            chrome.runtime.sendMessage(id, {type: 'PING'}, (response) => {
+                                if (chrome.runtime.lastError) {
+                                    reject(new Error(chrome.runtime.lastError.message));
+                                } else {
+                                    resolve(response);
+                                }
+                            });
+                        });
+                        return id; // 如果成功，返回這個 ID
+                    } catch (e) {
+                        // 繼續嘗試下一個
+                    }
+                }
+                
+                return null;
+            } catch (error) {
+                console.error('獲取擴充功能 ID 時出錯:', error);
+                return null;
+            }
+        }
+
+        // 頁面載入時自動檢查狀態
+        window.addEventListener('load', () => {
+            console.log('🎬 Manifest 測試頁面已載入');
+            console.log('請確保 CDN Detector 擴充功能已安裝並啟用');
+            
+            // 自動檢查擴充功能狀態
+            setTimeout(checkExtensionStatus, 1000);
+        });
+    </script>
+</body>
+</html> 
