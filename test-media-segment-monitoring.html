@@ -166,10 +166,12 @@
                 <label for="extensionIdInput">擴展 ID (可選):</label>
                 <input type="text" id="extensionIdInput" placeholder="如果自動檢測失敗，請在此輸入擴展 ID" 
                        style="width: 300px; margin-left: 10px; padding: 5px;">
-                <button class="button" onclick="getExtensionIdFromChrome()" style="margin-left: 10px;">自動獲取</button>
+                <button class="button" onclick="getExtensionIdFromChrome()" style="margin-left: 10px;">獲取說明</button>
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                💡 如需手動獲取擴展 ID：前往 <strong>chrome://extensions/</strong> → 開啟「開發者模式」→ 找到「CDN Detector」擴展的 ID
+                💡 如需手動獲取擴展 ID：
+                <a href="get-extension-id.html" target="_blank" style="color: #007bff;">開啟擴展 ID 工具</a> 
+                或前往 <strong>chrome://extensions/</strong> → 開啟「開發者模式」→ 找到「CDN Detector」擴展的 ID
             </div>
             <button class="button" onclick="testExtensionConnection()">測試擴展連接</button>
             <div id="connectionStatus"></div>
@@ -334,44 +336,40 @@
                 }
             }
             
-            try {
-                // 嘗試獲取所有已安裝的擴展
-                const extensions = await chrome.management.getAll();
-                const cdnDetector = extensions.find(ext => 
-                    ext.name.includes('CDN Detector') || 
-                    ext.name.includes('CDN')
-                );
-                
-                if (cdnDetector && cdnDetector.enabled) {
-                    logMessage(`找到 CDN Detector 擴展: ${cdnDetector.id}`, 'info');
-                    // 自動填入輸入框
-                    document.getElementById('extensionIdInput').value = cdnDetector.id;
-                    return cdnDetector.id;
-                }
-                
-                logMessage('未找到已啟用的 CDN Detector 擴展', 'error');
-                return null;
-            } catch (error) {
-                logMessage(`自動獲取擴展 ID 失敗: ${error.message}`, 'error');
-                logMessage('請手動輸入擴展 ID，或在 chrome://extensions/ 中查看', 'info');
-                return null;
-            }
+            // 嘗試一些常見的擴展 ID 格式
+            const commonPatterns = [
+                // Chrome 擴展 ID 通常是 32 位的字母數字組合
+                'abcdefghijklmnopqrstuvwxyz123456', // 示例格式
+                'cdndetector' + Math.random().toString(36).substr(2, 20) // 隨機生成示例
+            ];
+            
+            logMessage('無法自動獲取擴展 ID，請手動輸入', 'info');
+            logMessage('前往 chrome://extensions/ → 開啟開發者模式 → 查看 CDN Detector 的 ID', 'info');
+            return null;
         }
 
         async function getExtensionIdFromChrome() {
+            logMessage('提供擴展 ID 獲取指引...', 'info');
+            
+            const instructions = `
+📋 手動獲取擴展 ID 步驟：
+1. 開啟新標籤頁，前往：chrome://extensions/
+2. 開啟右上角的「開發者模式」開關
+3. 找到「CDN Detector」擴展
+4. 複製擴展卡片上顯示的 ID（32位字母數字組合）
+5. 將 ID 貼到上方的輸入框中
+6. 點擊「測試擴展連接」按鈕
+            `;
+            
+            logMessage(instructions, 'info');
+            showStatus('connectionStatus', '📋 請按照測試日誌中的步驟手動獲取擴展 ID', 'info');
+            
+            // 嘗試開啟擴展頁面（可能會被瀏覽器阻擋）
             try {
-                logMessage('嘗試自動獲取擴展 ID...', 'info');
-                const extensionId = await getExtensionId();
-                if (extensionId) {
-                    logMessage(`成功獲取擴展 ID: ${extensionId}`, 'info');
-                    showStatus('connectionStatus', `✅ 自動獲取成功: ${extensionId}`, 'success');
-                } else {
-                    logMessage('自動獲取失敗，請手動輸入', 'error');
-                    showStatus('connectionStatus', '❌ 自動獲取失敗，請前往 chrome://extensions/ 查看擴展 ID 並手動輸入', 'error');
-                }
+                window.open('chrome://extensions/', '_blank');
+                logMessage('已嘗試開啟擴展管理頁面', 'info');
             } catch (error) {
-                logMessage(`自動獲取擴展 ID 錯誤: ${error.message}`, 'error');
-                showStatus('connectionStatus', `❌ 自動獲取錯誤: ${error.message}`, 'error');
+                logMessage('無法自動開啟擴展管理頁面，請手動前往 chrome://extensions/', 'info');
             }
         }
 
