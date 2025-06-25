@@ -162,6 +162,15 @@
         
         <div class="test-section">
             <h2>🔗 擴展連接測試</h2>
+            <div style="margin-bottom: 10px;">
+                <label for="extensionIdInput">擴展 ID (可選):</label>
+                <input type="text" id="extensionIdInput" placeholder="如果自動檢測失敗，請在此輸入擴展 ID" 
+                       style="width: 300px; margin-left: 10px; padding: 5px;">
+                <button class="button" onclick="getExtensionIdFromChrome()" style="margin-left: 10px;">自動獲取</button>
+            </div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                💡 如需手動獲取擴展 ID：前往 <strong>chrome://extensions/</strong> → 開啟「開發者模式」→ 找到「CDN Detector」擴展的 ID
+            </div>
             <button class="button" onclick="testExtensionConnection()">測試擴展連接</button>
             <div id="connectionStatus"></div>
         </div>
@@ -284,13 +293,24 @@
             try {
                 logMessage('測試擴展連接...', 'info');
                 
-                const response = await chrome.runtime.sendMessage({
+                // 獲取擴展 ID
+                const extensionId = await getExtensionId();
+                if (!extensionId) {
+                    showStatus('connectionStatus', '❌ 無法找到 CDN Detector 擴展', 'error');
+                    logMessage('無法找到 CDN Detector 擴展', 'error');
+                    return;
+                }
+                
+                const response = await chrome.runtime.sendMessage(extensionId, {
                     type: 'PING'
                 });
                 
                 if (response && response.status === 'ok') {
-                    showStatus('connectionStatus', `✅ 擴展連接成功！Extension ID: ${response.extensionId}`, 'success');
+                    showStatus('connectionStatus', `✅ 擴展連接成功！Extension ID: ${extensionId}`, 'success');
                     logMessage('擴展連接測試成功', 'info');
+                    
+                    // 儲存擴展 ID 供後續使用
+                    window.cdnDetectorExtensionId = extensionId;
                 } else {
                     showStatus('connectionStatus', '❌ 擴展回應異常', 'error');
                     logMessage('擴展回應異常', 'error');
@@ -301,11 +321,71 @@
             }
         }
 
+        async function getExtensionId() {
+            // 首先檢查手動輸入的 ID
+            const manualId = document.getElementById('extensionIdInput').value.trim();
+            if (manualId) {
+                try {
+                    await chrome.runtime.sendMessage(manualId, {type: 'PING'});
+                    logMessage(`使用手動輸入的擴展 ID: ${manualId}`, 'info');
+                    return manualId;
+                } catch (error) {
+                    logMessage(`手動輸入的擴展 ID 無效: ${error.message}`, 'error');
+                }
+            }
+            
+            try {
+                // 嘗試獲取所有已安裝的擴展
+                const extensions = await chrome.management.getAll();
+                const cdnDetector = extensions.find(ext => 
+                    ext.name.includes('CDN Detector') || 
+                    ext.name.includes('CDN')
+                );
+                
+                if (cdnDetector && cdnDetector.enabled) {
+                    logMessage(`找到 CDN Detector 擴展: ${cdnDetector.id}`, 'info');
+                    // 自動填入輸入框
+                    document.getElementById('extensionIdInput').value = cdnDetector.id;
+                    return cdnDetector.id;
+                }
+                
+                logMessage('未找到已啟用的 CDN Detector 擴展', 'error');
+                return null;
+            } catch (error) {
+                logMessage(`自動獲取擴展 ID 失敗: ${error.message}`, 'error');
+                logMessage('請手動輸入擴展 ID，或在 chrome://extensions/ 中查看', 'info');
+                return null;
+            }
+        }
+
+        async function getExtensionIdFromChrome() {
+            try {
+                logMessage('嘗試自動獲取擴展 ID...', 'info');
+                const extensionId = await getExtensionId();
+                if (extensionId) {
+                    logMessage(`成功獲取擴展 ID: ${extensionId}`, 'info');
+                    showStatus('connectionStatus', `✅ 自動獲取成功: ${extensionId}`, 'success');
+                } else {
+                    logMessage('自動獲取失敗，請手動輸入', 'error');
+                    showStatus('connectionStatus', '❌ 自動獲取失敗，請前往 chrome://extensions/ 查看擴展 ID 並手動輸入', 'error');
+                }
+            } catch (error) {
+                logMessage(`自動獲取擴展 ID 錯誤: ${error.message}`, 'error');
+                showStatus('connectionStatus', `❌ 自動獲取錯誤: ${error.message}`, 'error');
+            }
+        }
+
         async function getMediaSegmentStats() {
             try {
                 logMessage('獲取媒體片段統計...', 'info');
                 
-                const response = await chrome.runtime.sendMessage({
+                const extensionId = window.cdnDetectorExtensionId || await getExtensionId();
+                if (!extensionId) {
+                    showStatus('segmentStats', '❌ 無法找到 CDN Detector 擴展', 'error');
+                    return;
+                }
+                
+                const response = await chrome.runtime.sendMessage(extensionId, {
                     type: 'GET_MEDIA_SEGMENT_STATS'
                 });
                 
@@ -342,7 +422,13 @@
             try {
                 logMessage('清除媒體片段資料...', 'info');
                 
-                const response = await chrome.runtime.sendMessage({
+                const extensionId = window.cdnDetectorExtensionId || await getExtensionId();
+                if (!extensionId) {
+                    showStatus('segmentStats', '❌ 無法找到 CDN Detector 擴展', 'error');
+                    return;
+                }
+                
+                const response = await chrome.runtime.sendMessage(extensionId, {
                     type: 'CLEAR_MEDIA_SEGMENT_DATA'
                 });
                 
@@ -368,7 +454,13 @@
             try {
                 logMessage('獲取媒體片段詳細資料...', 'info');
                 
-                const response = await chrome.runtime.sendMessage({
+                const extensionId = window.cdnDetectorExtensionId || await getExtensionId();
+                if (!extensionId) {
+                    showStatus('segmentData', '❌ 無法找到 CDN Detector 擴展', 'error');
+                    return;
+                }
+                
+                const response = await chrome.runtime.sendMessage(extensionId, {
                     type: 'GET_MEDIA_SEGMENT_DATA'
                 });
                 
@@ -418,7 +510,10 @@
 
         async function updateBandwidthDisplay() {
             try {
-                const response = await chrome.runtime.sendMessage({
+                const extensionId = window.cdnDetectorExtensionId || await getExtensionId();
+                if (!extensionId) return; // 靜默處理
+                
+                const response = await chrome.runtime.sendMessage(extensionId, {
                     type: 'GET_MEDIA_SEGMENT_DATA'
                 });
                 
