@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task 22.3 Content Script 測試頁面</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .test-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .test-section h2 {
+            margin-top: 0;
+            color: #FFD700;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+            padding-bottom: 10px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-success { background-color: #4CAF50; }
+        .status-warning { background-color: #FF9800; }
+        .status-error { background-color: #F44336; }
+        .status-pending { background-color: #9E9E9E; }
+        
+        .button {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .button-danger {
+            background: linear-gradient(45deg, #FF416C, #FF4B2B);
+        }
+        
+        .log-output {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        
+        .log-info { background: rgba(76, 175, 80, 0.2); }
+        .log-warn { background: rgba(255, 152, 0, 0.2); }
+        .log-error { background: rgba(244, 67, 54, 0.2); }
+        .log-debug { background: rgba(158, 158, 158, 0.2); }
+        
+        .video-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .video-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .test-results {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .test-item {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .countdown {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #FFD700;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Task 22.3 Content Script 測試</h1>
+        
+        <!-- Content Script 狀態檢查 -->
+        <div class="test-section">
+            <h2>📡 Content Script 載入狀態</h2>
+            <div class="test-results" id="contentScriptStatus">
+                <div class="test-item">
+                    <span class="status-indicator status-pending"></span>
+                    <span>正在檢查 Content Script 載入狀態...</span>
+                </div>
+            </div>
+            <div class="countdown" id="loadingCountdown">檢查中... (10秒)</div>
+            <button class="button" onclick="checkContentScriptStatus()">重新檢查</button>
+            <button class="button" onclick="testCommunication()">測試通信</button>
+        </div>
+        
+        <!-- 視頻元素測試 -->
+        <div class="test-section">
+            <h2>🎥 視頻元素檢測測試</h2>
+            <div class="video-container">
+                <div class="video-item">
+                    <h3>HTML5 視頻 1</h3>
+                    <video id="testVideo1" controls>
+                        <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+                        <source src="https://www.w3schools.com/html/mov_bbb.ogg" type="video/ogg">
+                        您的瀏覽器不支援 HTML5 視頻。
+                    </video>
+                </div>
+                <div class="video-item">
+                    <h3>HTML5 視頻 2</h3>
+                    <video id="testVideo2" controls muted>
+                        <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+                        您的瀏覽器不支援 HTML5 視頻。
+                    </video>
+                </div>
+            </div>
+            
+            <div>
+                <button class="button" onclick="playAllVideos()">播放所有視頻</button>
+                <button class="button" onclick="pauseAllVideos()">暫停所有視頻</button>
+                <button class="button" onclick="detectVideos()">重新檢測視頻</button>
+                <button class="button" onclick="addDynamicVideo()">添加動態視頻</button>
+            </div>
+            
+            <div class="test-results" id="videoDetectionResults">
+                <div class="test-item">
+                    <span class="status-indicator status-pending"></span>
+                    <span>等待視頻檢測結果...</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 事件監聽測試 -->
+        <div class="test-section">
+            <h2>📊 視頻事件監聽測試</h2>
+            <div class="test-results" id="eventTestResults">
+                <div class="test-item">
+                    <span class="status-indicator status-pending"></span>
+                    <span>等待視頻事件...</span>
+                </div>
+            </div>
+            <button class="button" onclick="clearEventLog()">清除事件日誌</button>
+        </div>
+        
+        <!-- 數據收集測試 -->
+        <div class="test-section">
+            <h2>📈 數據收集測試</h2>
+            <div>
+                <button class="button" onclick="getVideoQualityData()">獲取視頻品質數據</button>
+                <button class="button" onclick="getVideoQualityStats()">獲取統計資訊</button>
+                <button class="button" onclick="clearVideoQualityData()">清除數據</button>
+            </div>
+            <div class="log-output" id="dataCollectionResults">
+                <div class="log-entry log-info">等待數據收集測試...</div>
+            </div>
+        </div>
+        
+        <!-- Console 日誌監控 -->
+        <div class="test-section">
+            <h2>📝 Console 日誌監控</h2>
+            <div class="log-output" id="consoleLogOutput">
+                <div class="log-entry log-info">監控 Console 日誌中...</div>
+            </div>
+            <button class="button" onclick="clearConsoleLog()">清除日誌</button>
+            <button class="button" onclick="exportLogs()">匯出日誌</button>
+        </div>
+    </div>
+
+    <script>
+        // 全域變數
+        let videoEventCount = 0;
+        let contentScriptLoaded = false;
+        let checkInterval;
+        let countdownInterval;
+        let logEntries = [];
+        
+        // 頁面載入完成後開始檢查
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🎬 Task 22.3 測試頁面載入完成');
+            startContentScriptCheck();
+            setupVideoEventListeners();
+            interceptConsoleLog();
+        });
+        
+        // 開始檢查 Content Script
+        function startContentScriptCheck() {
+            let countdown = 10;
+            const countdownElement = document.getElementById('loadingCountdown');
+            
+            countdownInterval = setInterval(() => {
+                countdownElement.textContent = `檢查中... (${countdown}秒)`;
+                countdown--;
+                
+                if (countdown < 0) {
+                    clearInterval(countdownInterval);
+                    countdownElement.textContent = '檢查完成';
+                }
+            }, 1000);
+            
+            // 延遲檢查以確保 content script 有時間載入
+            setTimeout(() => {
+                checkContentScriptStatus();
+                // 每5秒檢查一次
+                checkInterval = setInterval(checkContentScriptStatus, 5000);
+            }, 2000);
+        }
+        
+        // 檢查 Content Script 狀態
+        function checkContentScriptStatus() {
+            const statusElement = document.getElementById('contentScriptStatus');
+            const results = [];
+            
+            // 檢查 1: Console 日誌
+            const hasVideoMonitorLog = logEntries.some(log => 
+                log.message.includes('Video Quality Monitor') || 
+                log.message.includes('視頻品質監控已載入')
+            );
+            
+            results.push({
+                test: 'Console 日誌檢查',
+                passed: hasVideoMonitorLog,
+                message: hasVideoMonitorLog ? 
+                    '✅ 檢測到 Video Quality Monitor 日誌' : 
+                    '❌ 未檢測到 Video Quality Monitor 日誌'
+            });
+            
+            // 檢查 2: Chrome Runtime API
+            const hasChromeRuntime = typeof chrome !== 'undefined' && chrome.runtime;
+            results.push({
+                test: 'Chrome Runtime API',
+                passed: hasChromeRuntime,
+                message: hasChromeRuntime ? 
+                    '✅ Chrome Runtime API 可用' : 
+                    '❌ Chrome Runtime API 不可用'
+            });
+            
+            // 檢查 3: 視頻元素檢測
+            const videos = document.querySelectorAll('video');
+            results.push({
+                test: '視頻元素檢測',
+                passed: videos.length > 0,
+                message: `✅ 檢測到 ${videos.length} 個視頻元素`
+            });
+            
+            // 檢查 4: MutationObserver
+            const hasMutationObserver = typeof MutationObserver !== 'undefined';
+            results.push({
+                test: 'MutationObserver 支援',
+                passed: hasMutationObserver,
+                message: hasMutationObserver ? 
+                    '✅ MutationObserver 可用' : 
+                    '❌ MutationObserver 不可用'
+            });
+            
+            // 更新顯示
+            statusElement.innerHTML = results.map(result => `
+                <div class="test-item">
+                    <span class="status-indicator ${result.passed ? 'status-success' : 'status-error'}"></span>
+                    <span>${result.test}: ${result.message}</span>
+                </div>
+            `).join('');
+            
+            const allPassed = results.every(r => r.passed);
+            contentScriptLoaded = allPassed;
+            
+            if (allPassed) {
+                addLogEntry('Content Script 檢查通過！', 'info');
+                clearInterval(checkInterval);
+            }
+        }
+        
+        // 測試與 Background Script 通信
+        function testCommunication() {
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                addLogEntry('Chrome Runtime API 不可用', 'error');
+                return;
+            }
+            
+            addLogEntry('測試與 Background Script 通信...', 'info');
+            
+            chrome.runtime.sendMessage({
+                type: 'GET_VIDEO_QUALITY_DATA'
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    addLogEntry(`通信失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    addLogEntry(`通信成功: ${JSON.stringify(response, null, 2)}`, 'info');
+                }
+            });
+        }
+        
+        // 設置視頻事件監聽器
+        function setupVideoEventListeners() {
+            const videos = document.querySelectorAll('video');
+            const events = [
+                'loadstart', 'loadeddata', 'loadedmetadata', 'canplay', 'canplaythrough',
+                'play', 'pause', 'seeking', 'seeked', 'waiting', 'playing',
+                'timeupdate', 'ended', 'error', 'stalled', 'suspend', 'abort',
+                'emptied', 'ratechange', 'volumechange'
+            ];
+            
+            videos.forEach((video, videoIndex) => {
+                events.forEach(eventName => {
+                    video.addEventListener(eventName, (event) => {
+                        videoEventCount++;
+                        updateEventTestResults(videoIndex + 1, eventName, event);
+                    }, { passive: true });
+                });
+            });
+            
+            addLogEntry(`設置了 ${videos.length} 個視頻的事件監聽器`, 'info');
+        }
+        
+        // 更新事件測試結果
+        function updateEventTestResults(videoIndex, eventName, event) {
+            const resultsElement = document.getElementById('eventTestResults');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const eventInfo = `
+                <div class="test-item">
+                    <span class="status-indicator status-success"></span>
+                    <span>${timestamp} - 視頻${videoIndex}: ${eventName}</span>
+                </div>
+            `;
+            
+            resultsElement.innerHTML = eventInfo + resultsElement.innerHTML;
+            
+            // 限制顯示的事件數量
+            const items = resultsElement.querySelectorAll('.test-item');
+            if (items.length > 20) {
+                items[items.length - 1].remove();
+            }
+            
+            addLogEntry(`視頻事件: 視頻${videoIndex} - ${eventName}`, 'debug');
+        }
+        
+        // 播放所有視頻
+        function playAllVideos() {
+            const videos = document.querySelectorAll('video');
+            videos.forEach((video, index) => {
+                video.play().then(() => {
+                    addLogEntry(`視頻${index + 1} 開始播放`, 'info');
+                }).catch(error => {
+                    addLogEntry(`視頻${index + 1} 播放失敗: ${error.message}`, 'error');
+                });
+            });
+        }
+        
+        // 暫停所有視頻
+        function pauseAllVideos() {
+            const videos = document.querySelectorAll('video');
+            videos.forEach((video, index) => {
+                video.pause();
+                addLogEntry(`視頻${index + 1} 已暫停`, 'info');
+            });
+        }
+        
+        // 檢測視頻元素
+        function detectVideos() {
+            const videos = document.querySelectorAll('video');
+            const objects = document.querySelectorAll('object');
+            const embeds = document.querySelectorAll('embed');
+            const iframes = document.querySelectorAll('iframe');
+            
+            const resultsElement = document.getElementById('videoDetectionResults');
+            resultsElement.innerHTML = `
+                <div class="test-item">
+                    <span class="status-indicator status-success"></span>
+                    <span>檢測到 ${videos.length} 個 video 元素</span>
+                </div>
+                <div class="test-item">
+                    <span class="status-indicator status-info"></span>
+                    <span>檢測到 ${objects.length} 個 object 元素</span>
+                </div>
+                <div class="test-item">
+                    <span class="status-indicator status-info"></span>
+                    <span>檢測到 ${embeds.length} 個 embed 元素</span>
+                </div>
+                <div class="test-item">
+                    <span class="status-indicator status-info"></span>
+                    <span>檢測到 ${iframes.length} 個 iframe 元素</span>
+                </div>
+            `;
+            
+            addLogEntry(`視頻檢測: ${videos.length} video, ${objects.length} object, ${embeds.length} embed, ${iframes.length} iframe`, 'info');
+        }
+        
+        // 添加動態視頻
+        function addDynamicVideo() {
+            const container = document.querySelector('.video-container');
+            const videoCount = container.children.length + 1;
+            
+            const videoItem = document.createElement('div');
+            videoItem.className = 'video-item';
+            videoItem.innerHTML = `
+                <h3>動態視頻 ${videoCount}</h3>
+                <video controls muted>
+                    <source src="https://www.w3schools.com/html/movie.mp4" type="video/mp4">
+                    動態載入的視頻
+                </video>
+            `;
+            
+            container.appendChild(videoItem);
+            
+            // 為新視頻設置事件監聽器
+            const newVideo = videoItem.querySelector('video');
+            const events = ['play', 'pause', 'ended', 'error', 'loadedmetadata'];
+            events.forEach(eventName => {
+                newVideo.addEventListener(eventName, (event) => {
+                    updateEventTestResults(videoCount, eventName, event);
+                });
+            });
+            
+            addLogEntry(`添加了動態視頻 ${videoCount}`, 'info');
+            
+            // 重新檢測視頻
+            setTimeout(detectVideos, 100);
+        }
+        
+        // 獲取視頻品質數據
+        function getVideoQualityData() {
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                addDataResult('Chrome Runtime API 不可用', 'error');
+                return;
+            }
+            
+            chrome.runtime.sendMessage({
+                type: 'GET_VIDEO_QUALITY_DATA'
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    addDataResult(`獲取數據失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    addDataResult(`視頻品質數據: ${JSON.stringify(response, null, 2)}`, 'info');
+                }
+            });
+        }
+        
+        // 獲取視頻品質統計
+        function getVideoQualityStats() {
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                addDataResult('Chrome Runtime API 不可用', 'error');
+                return;
+            }
+            
+            chrome.runtime.sendMessage({
+                type: 'GET_VIDEO_QUALITY_STATS'
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    addDataResult(`獲取統計失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    addDataResult(`視頻品質統計: ${JSON.stringify(response, null, 2)}`, 'info');
+                }
+            });
+        }
+        
+        // 清除視頻品質數據
+        function clearVideoQualityData() {
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                addDataResult('Chrome Runtime API 不可用', 'error');
+                return;
+            }
+            
+            chrome.runtime.sendMessage({
+                type: 'CLEAR_VIDEO_QUALITY_DATA'
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    addDataResult(`清除數據失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    addDataResult('視頻品質數據已清除', 'info');
+                }
+            });
+        }
+        
+        // 添加數據結果
+        function addDataResult(message, level) {
+            const resultsElement = document.getElementById('dataCollectionResults');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${level}`;
+            entry.textContent = `${timestamp} - ${message}`;
+            
+            resultsElement.insertBefore(entry, resultsElement.firstChild);
+            
+            // 限制顯示的條目數量
+            const entries = resultsElement.querySelectorAll('.log-entry');
+            if (entries.length > 50) {
+                entries[entries.length - 1].remove();
+            }
+        }
+        
+        // 攔截 Console 日誌
+        function interceptConsoleLog() {
+            const originalLog = console.log;
+            const originalWarn = console.warn;
+            const originalError = console.error;
+            
+            console.log = function(...args) {
+                const message = args.join(' ');
+                addLogEntry(message, 'info');
+                originalLog.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                const message = args.join(' ');
+                addLogEntry(message, 'warn');
+                originalWarn.apply(console, args);
+            };
+            
+            console.error = function(...args) {
+                const message = args.join(' ');
+                addLogEntry(message, 'error');
+                originalError.apply(console, args);
+            };
+        }
+        
+        // 添加日誌條目
+        function addLogEntry(message, level) {
+            const timestamp = new Date().toLocaleTimeString();
+            logEntries.push({ timestamp, message, level });
+            
+            const logOutput = document.getElementById('consoleLogOutput');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${level}`;
+            entry.textContent = `${timestamp} - ${message}`;
+            
+            logOutput.insertBefore(entry, logOutput.firstChild);
+            
+            // 限制日誌條目數量
+            if (logEntries.length > 100) {
+                logEntries = logEntries.slice(0, 50);
+            }
+            
+            const entries = logOutput.querySelectorAll('.log-entry');
+            if (entries.length > 50) {
+                entries[entries.length - 1].remove();
+            }
+        }
+        
+        // 清除事件日誌
+        function clearEventLog() {
+            document.getElementById('eventTestResults').innerHTML = `
+                <div class="test-item">
+                    <span class="status-indicator status-pending"></span>
+                    <span>等待視頻事件...</span>
+                </div>
+            `;
+            videoEventCount = 0;
+        }
+        
+        // 清除 Console 日誌
+        function clearConsoleLog() {
+            document.getElementById('consoleLogOutput').innerHTML = `
+                <div class="log-entry log-info">Console 日誌已清除</div>
+            `;
+            logEntries = [];
+        }
+        
+        // 匯出日誌
+        function exportLogs() {
+            const data = {
+                timestamp: new Date().toISOString(),
+                contentScriptLoaded,
+                videoEventCount,
+                logEntries: logEntries.slice(0, 100),
+                videoElements: document.querySelectorAll('video').length,
+                userAgent: navigator.userAgent
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {
+                type: 'application/json'
+            });
+            
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `task-22.3-test-logs-${Date.now()}.json`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+            addLogEntry('測試日誌已匯出', 'info');
+        }
+        
+        // 頁面卸載時清理
+        window.addEventListener('beforeunload', () => {
+            if (checkInterval) clearInterval(checkInterval);
+            if (countdownInterval) clearInterval(countdownInterval);
+        });
+    </script>
+</body>
+</html> 

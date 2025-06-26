@@ -17,6 +17,12 @@
     "<all_urls>"
   ],
   "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["video-quality-monitor.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
   ],
   "action": {
     "default_popup": "popup.html",
@@ -24,7 +30,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js"],
+      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js", "test-content-script.html"],
       "matches": ["<all_urls>"]
     }
   ],
