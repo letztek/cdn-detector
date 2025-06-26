@@ -1795,6 +1795,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         break;
         
+      case 'DEBUG_MEDIA_SEGMENT_MAP':
+        const debugInfo = {
+          mediaSegmentMapKeys: Object.keys(mediaSegmentMap),
+          segmentBandwidthDataKeys: Object.keys(segmentBandwidthData),
+          mediaSegmentMapContent: mediaSegmentMap,
+          segmentBandwidthDataContent: segmentBandwidthData,
+          requestedTabId: message.tabId,
+          messageTabId: tabId,
+          timestamp: Date.now()
+        };
+        
+        logMessage(`Debug media segment map: ${JSON.stringify(debugInfo, null, 2)}`, 'debug');
+        sendResponse({ success: true, debug: debugInfo });
+        break;
+        
       case 'GET_MEDIA_SEGMENT_STATS':
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           const activeTabId = tabs[0]?.id;
@@ -1924,6 +1939,7 @@ function startListening() {
         
         // 新增：檢測並處理媒體片段檔案 (Task 22.2)
         if (isMediaSegmentFile(url)) {
+          logMessage(`🎵 Media segment detected: ${url}`, 'info');
           // 處理媒體片段，計算頻寬和下載時間
           processMediaSegment({
             url: url,
@@ -1933,6 +1949,11 @@ function startListening() {
             responseHeaders: headers,
             statusCode: details.statusCode
           });
+        } else {
+          // 調試：記錄非媒體片段檔案
+          if (url.includes('.m4s') || url.includes('.ts') || url.includes('.m4a') || url.includes('.m4v') || url.includes('segment') || url.includes('chunk')) {
+            logMessage(`⚠️ URL contains media keywords but not detected as segment: ${url}`, 'warn');
+          }
         }
         const cdnDetection = detectCDN(headers, url);
         
@@ -2622,16 +2643,35 @@ function handleVideoQualityLog(tabId, logData) {
 
 
 
-// 標籤頁事件監聽
-chrome.tabs.onRemoved.addListener((tabId) => {
-  if (videoQualityData.tabs[tabId]) {
-    delete videoQualityData.tabs[tabId];
-    updateGlobalVideoQualityStats();
-    logMessage(`Cleaned up video quality data for removed tab ${tabId}`, 'info');
+// 標籤頁事件監聽（移至初始化區塊統一管理）
+
+// 定期清理視頻品質數據
+setInterval(() => {
+  cleanupVideoQualityData();
+}, 10 * 60 * 1000); // 每 10 分鐘執行一次
+
+// 初始化時載入保存的視頻品質數據
+chrome.storage.local.get(['videoQualityData'], (result) => {
+  if (result.videoQualityData) {
+    videoQualityData.global = result.videoQualityData.global || videoQualityData.global;
+    logMessage(`Loaded video quality data: ${result.videoQualityData.tabCount || 0} tabs`, 'info');
   }
 });
 
+logMessage('Video Quality Monitoring System initialized', 'info');
+
+// ==================== 初始化系統 ====================
+
+// 初始化 CDN 配置
+initializeCDNConfigs();
+
+// 監聽標籤頁更新事件
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // 更新當前活躍標籤頁 ID
+  if (changeInfo.status === 'complete' && tab.active) {
+    currentTabId = tabId;
+  }
+  
   // 當標籤頁 URL 改變時，清理該標籤頁的視頻數據
   if (changeInfo.url && videoQualityData.tabs[tabId]) {
     const tabData = videoQualityData.tabs[tabId];
@@ -2648,17 +2688,48 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// 定期清理視頻品質數據
-setInterval(() => {
-  cleanupVideoQualityData();
-}, 10 * 60 * 1000); // 每 10 分鐘執行一次
+// 監聽標籤頁切換事件
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  currentTabId = activeInfo.tabId;
+});
 
-// 初始化時載入保存的視頻品質數據
-chrome.storage.local.get(['videoQualityData'], (result) => {
-  if (result.videoQualityData) {
-    videoQualityData.global = result.videoQualityData.global || videoQualityData.global;
-    logMessage(`Loaded video quality data: ${result.videoQualityData.tabCount || 0} tabs`, 'info');
+// 監聽標籤頁關閉事件
+chrome.tabs.onRemoved.addListener((tabId) => {
+  // 清理標籤頁相關資料
+  delete tabDetectionData[tabId];
+  delete manifestMap[tabId];
+  delete mediaSegmentMap[tabId];
+  delete segmentBandwidthData[tabId];
+  
+  // 清理視頻品質資料
+  if (videoQualityData.tabs[tabId]) {
+    delete videoQualityData.tabs[tabId];
+    updateGlobalVideoQualityStats();
+  }
+  
+  // 清理請求時間記錄
+  Object.keys(requestStartTimes).forEach(key => {
+    if (key.includes(`_${tabId}`)) {
+      delete requestStartTimes[key];
+    }
+  });
+  
+  logMessage(`Cleaned up all data for closed tab ${tabId}`, 'info');
+});
+
+// 初始化時載入保存的配置
+chrome.storage.local.get(['cdnDetectionEnabled'], (result) => {
+  cdnDetectionEnabled = result.cdnDetectionEnabled || false;
+  
+  if (cdnDetectionEnabled) {
+    startListening();
+    logMessage('CDN detection enabled on startup', 'info');
+  } else {
+    logMessage('CDN detection disabled on startup', 'info');
   }
 });
 
-logMessage('Video Quality Monitoring System initialized', 'info'); 
+// 設置初始圖標
+chrome.action.setIcon({ path: 'icon-red.png' });
+
+logMessage('Background script initialized successfully', 'info'); 

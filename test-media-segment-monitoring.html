@@ -163,8 +163,8 @@
         <div class="test-section">
             <h2>🔗 擴展連接測試</h2>
             <div style="margin-bottom: 10px;">
-                <label for="extensionIdInput">擴展 ID (可選):</label>
-                <input type="text" id="extensionIdInput" placeholder="如果自動檢測失敗，請在此輸入擴展 ID" 
+                <label for="extensionIdInput">擴展 ID:</label>
+                <input type="text" id="extensionIdInput" value="nonjdhdineehckicdnmnpmdapfdnlhbc" 
                        style="width: 300px; margin-left: 10px; padding: 5px;">
                 <button class="button" onclick="getExtensionIdFromChrome()" style="margin-left: 10px;">獲取說明</button>
             </div>
@@ -296,12 +296,14 @@
                 logMessage('測試擴展連接...', 'info');
                 
                 // 獲取擴展 ID
-                const extensionId = await getExtensionId();
+                const extensionId = document.getElementById('extensionIdInput').value.trim();
                 if (!extensionId) {
-                    showStatus('connectionStatus', '❌ 無法找到 CDN Detector 擴展', 'error');
-                    logMessage('無法找到 CDN Detector 擴展', 'error');
+                    showStatus('connectionStatus', '❌ 請在輸入框中填寫擴展 ID', 'error');
+                    logMessage('請在輸入框中填寫擴展 ID', 'error');
                     return;
                 }
+                
+                logMessage(`使用擴展 ID: ${extensionId}`, 'info');
                 
                 const response = await chrome.runtime.sendMessage(extensionId, {
                     type: 'PING'
@@ -324,27 +326,19 @@
         }
 
         async function getExtensionId() {
-            // 首先檢查手動輸入的 ID
-            const manualId = document.getElementById('extensionIdInput').value.trim();
-            if (manualId) {
-                try {
-                    await chrome.runtime.sendMessage(manualId, {type: 'PING'});
-                    logMessage(`使用手動輸入的擴展 ID: ${manualId}`, 'info');
-                    return manualId;
-                } catch (error) {
-                    logMessage(`手動輸入的擴展 ID 無效: ${error.message}`, 'error');
-                }
+            // 首先檢查是否已經有儲存的 ID
+            if (window.cdnDetectorExtensionId) {
+                return window.cdnDetectorExtensionId;
             }
             
-            // 嘗試一些常見的擴展 ID 格式
-            const commonPatterns = [
-                // Chrome 擴展 ID 通常是 32 位的字母數字組合
-                'abcdefghijklmnopqrstuvwxyz123456', // 示例格式
-                'cdndetector' + Math.random().toString(36).substr(2, 20) // 隨機生成示例
-            ];
+            // 檢查手動輸入的 ID
+            const manualId = document.getElementById('extensionIdInput').value.trim();
+            if (manualId) {
+                logMessage(`使用手動輸入的擴展 ID: ${manualId}`, 'info');
+                return manualId;
+            }
             
-            logMessage('無法自動獲取擴展 ID，請手動輸入', 'info');
-            logMessage('前往 chrome://extensions/ → 開啟開發者模式 → 查看 CDN Detector 的 ID', 'info');
+            logMessage('無法找到擴展 ID，請確保已在輸入框中填寫', 'error');
             return null;
         }
 

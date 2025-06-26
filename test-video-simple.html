@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>測試影片頁面 - 媒體片段監控</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        video {
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 測試影片頁面</h1>
+        <p>這個頁面用於測試媒體片段監控功能。</p>
+        
+        <div class="info">
+            <strong>使用方法：</strong>
+            <ol>
+                <li>播放下面的測試影片</li>
+                <li>打開內部測試頁面：<code>chrome-extension://nonjdhdineehckicdnmnpmdapfdnlhbc/internal-test.html</code></li>
+                <li>點擊「獲取片段資料」按鈕</li>
+                <li>應該能看到媒體片段的監控資料</li>
+            </ol>
+        </div>
+
+        <h2>測試影片</h2>
+        <video controls>
+            <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+            <source src="https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4" type="video/mp4">
+            您的瀏覽器不支援 video 標籤。
+        </video>
+
+        <h2>DASH 測試影片 (更好的片段監控)</h2>
+        <p>如果您有 DASH 或 HLS 串流的 URL，可以在這裡測試：</p>
+        <video controls id="dashVideo">
+            <!-- DASH 或 HLS 源將通過 JavaScript 添加 -->
+        </video>
+
+        <h2>說明</h2>
+        <ul>
+            <li><strong>MP4 影片</strong>：可能不會產生太多片段資料，因為它是單一檔案</li>
+            <li><strong>DASH/HLS 串流</strong>：會產生大量的媒體片段（.m4s, .ts 檔案），更適合測試</li>
+            <li><strong>YouTube 等平台</strong>：使用 DASH 串流，會產生豐富的片段監控資料</li>
+        </ul>
+
+        <div class="info">
+            <strong>建議測試步驟：</strong>
+            <ol>
+                <li>前往 YouTube 並播放任何影片</li>
+                <li>讓影片播放一段時間（至少 30 秒）</li>
+                <li>在內部測試頁面檢查媒體片段資料</li>
+                <li>您應該能看到 .m4s 檔案和頻寬資料</li>
+            </ol>
+        </div>
+    </div>
+
+    <script src="test-video-simple.js"></script>
+</body>
+</html> 

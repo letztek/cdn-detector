@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>擴展連接診斷</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-item {
+            margin: 15px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 擴展連接診斷工具</h1>
+        
+        <div class="test-item info">
+            <h3>環境資訊</h3>
+            <p><strong>當前頁面 URL:</strong> <span id="currentUrl"></span></p>
+            <p><strong>協議:</strong> <span id="protocol"></span></p>
+            <p><strong>Chrome 版本:</strong> <span id="chromeVersion"></span></p>
+        </div>
+
+        <div class="test-item">
+            <h3>擴展 ID 測試</h3>
+            <input type="text" id="extensionId" value="nonjdhdineehckicdnmnpmdapfdnlhbc" 
+                   style="width: 300px; padding: 5px;">
+            <button onclick="testConnection()">測試連接</button>
+            <div id="testResult"></div>
+        </div>
+
+        <div class="test-item">
+            <h3>Chrome API 可用性</h3>
+            <div id="apiTest"></div>
+        </div>
+
+        <div class="test-item">
+            <h3>診斷結果</h3>
+            <div id="diagnosis"></div>
+        </div>
+    </div>
+
+    <script>
+        // 顯示環境資訊
+        document.getElementById('currentUrl').textContent = window.location.href;
+        document.getElementById('protocol').textContent = window.location.protocol;
+        document.getElementById('chromeVersion').textContent = navigator.userAgent.match(/Chrome\/([0-9.]+)/)?.[1] || '未知';
+
+        // 檢查 Chrome API 可用性
+        function checkChromeAPIs() {
+            const apiTestDiv = document.getElementById('apiTest');
+            let html = '';
+            
+            // 檢查 chrome 物件
+            if (typeof chrome !== 'undefined') {
+                html += '<p class="success">✅ chrome 物件存在</p>';
+                
+                // 檢查 chrome.runtime
+                if (chrome.runtime) {
+                    html += '<p class="success">✅ chrome.runtime 存在</p>';
+                    
+                    // 檢查 sendMessage
+                    if (chrome.runtime.sendMessage) {
+                        html += '<p class="success">✅ chrome.runtime.sendMessage 存在</p>';
+                    } else {
+                        html += '<p class="error">❌ chrome.runtime.sendMessage 不存在</p>';
+                    }
+                } else {
+                    html += '<p class="error">❌ chrome.runtime 不存在</p>';
+                }
+            } else {
+                html += '<p class="error">❌ chrome 物件不存在</p>';
+            }
+            
+            apiTestDiv.innerHTML = html;
+        }
+
+        async function testConnection() {
+            const extensionId = document.getElementById('extensionId').value.trim();
+            const resultDiv = document.getElementById('testResult');
+            const diagnosisDiv = document.getElementById('diagnosis');
+            
+            if (!extensionId) {
+                resultDiv.innerHTML = '<p class="error">請輸入擴展 ID</p>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p class="info">測試中...</p>';
+            
+            try {
+                console.log('嘗試發送訊息到擴展:', extensionId);
+                
+                const response = await chrome.runtime.sendMessage(extensionId, {
+                    type: 'PING'
+                });
+                
+                console.log('收到回應:', response);
+                
+                if (response && response.status === 'ok') {
+                    resultDiv.innerHTML = '<p class="success">✅ 連接成功！擴展回應正常。</p>';
+                    resultDiv.innerHTML += '<pre>' + JSON.stringify(response, null, 2) + '</pre>';
+                    
+                    diagnosisDiv.innerHTML = `
+                        <p class="success">✅ 診斷結果：一切正常</p>
+                        <p>擴展 ID 正確，連接成功。您可以正常使用測試頁面。</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<p class="error">❌ 擴展回應異常</p>';
+                    resultDiv.innerHTML += '<pre>' + JSON.stringify(response, null, 2) + '</pre>';
+                }
+            } catch (error) {
+                console.error('連接錯誤:', error);
+                resultDiv.innerHTML = '<p class="error">❌ 連接失敗</p>';
+                resultDiv.innerHTML += '<pre>' + error.toString() + '</pre>';
+                
+                // 提供診斷建議
+                let diagnosis = '<h4>可能的原因：</h4><ul>';
+                
+                if (error.message.includes('Extension ID')) {
+                    diagnosis += '<li>擴展 ID 錯誤或擴展未安裝</li>';
+                    diagnosis += '<li>請確認 CDN Detector 擴展已安裝並啟用</li>';
+                    diagnosis += '<li>前往 chrome://extensions/ 檢查擴展 ID</li>';
+                }
+                
+                if (error.message.includes('Receiving end does not exist')) {
+                    diagnosis += '<li>擴展可能需要重新載入</li>';
+                    diagnosis += '<li>請嘗試在 chrome://extensions/ 頁面重新載入擴展</li>';
+                    diagnosis += '<li>或者擴展的 manifest.json 中的 externally_connectable 設定可能不包含當前頁面</li>';
+                }
+                
+                if (window.location.protocol === 'file:') {
+                    diagnosis += '<li>您正在使用 file:// 協議，這可能會有限制</li>';
+                    diagnosis += '<li>建議使用本地伺服器（如 http://localhost）來測試</li>';
+                }
+                
+                diagnosis += '</ul>';
+                diagnosisDiv.innerHTML = diagnosis;
+            }
+        }
+
+        // 頁面載入時執行檢查
+        window.addEventListener('load', () => {
+            checkChromeAPIs();
+        });
+    </script>
+</body>
+</html> 

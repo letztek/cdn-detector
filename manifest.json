@@ -24,11 +24,23 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["debug-video.html"],
+      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js"],
       "matches": ["<all_urls>"]
     }
   ],
   "externally_connectable": {
-    "matches": ["file://*/*", "http://localhost/*", "https://localhost/*"]
+    "matches": [
+      "file://*/*",
+      "http://localhost/*",
+      "https://localhost/*",
+      "http://localhost:*/*",
+      "https://localhost:*/*",
+      "http://127.0.0.1/*",
+      "https://127.0.0.1/*",
+      "http://127.0.0.1:*/*",
+      "https://127.0.0.1:*/*",
+      "http://*.local/*",
+      "https://*.local/*"
+    ]
   }
 } 
