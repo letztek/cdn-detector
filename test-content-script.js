@@ -145,13 +145,22 @@ function checkContentScriptStatus() {
             '❌ MutationObserver 不可用'
     });
     
-    // 更新顯示
-    statusElement.innerHTML = results.map(result => `
-        <div class="test-item">
-            <span class="status-indicator ${result.passed ? 'status-success' : 'status-error'}"></span>
-            <span>${result.test}: ${result.message}</span>
-        </div>
-    `).join('');
+    // 更新顯示 - 使用 DOM 操作而非 innerHTML
+    statusElement.textContent = ''; // 清空內容
+    results.forEach(result => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'test-item';
+        
+        const indicator = document.createElement('span');
+        indicator.className = `status-indicator ${result.passed ? 'status-success' : 'status-error'}`;
+        
+        const text = document.createElement('span');
+        text.textContent = `${result.test}: ${result.message}`;
+        
+        itemDiv.appendChild(indicator);
+        itemDiv.appendChild(text);
+        statusElement.appendChild(itemDiv);
+    });
     
     const allPassed = results.every(r => r.passed);
     contentScriptLoaded = allPassed;
@@ -209,14 +218,21 @@ function updateEventTestResults(videoIndex, eventName, event) {
     const resultsElement = document.getElementById('eventTestResults');
     const timestamp = new Date().toLocaleTimeString();
     
-    const eventInfo = `
-        <div class="test-item">
-            <span class="status-indicator status-success"></span>
-            <span>${timestamp} - 視頻${videoIndex}: ${eventName}</span>
-        </div>
-    `;
+    // 創建新的事件項目
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'test-item';
     
-    resultsElement.innerHTML = eventInfo + resultsElement.innerHTML;
+    const indicator = document.createElement('span');
+    indicator.className = 'status-indicator status-success';
+    
+    const text = document.createElement('span');
+    text.textContent = `${timestamp} - 視頻${videoIndex}: ${eventName}`;
+    
+    itemDiv.appendChild(indicator);
+    itemDiv.appendChild(text);
+    
+    // 插入到最前面
+    resultsElement.insertBefore(itemDiv, resultsElement.firstChild);
     
     // 限制顯示的事件數量
     const items = resultsElement.querySelectorAll('.test-item');
@@ -256,24 +272,28 @@ function detectVideos() {
     const iframes = document.querySelectorAll('iframe');
     
     const resultsElement = document.getElementById('videoDetectionResults');
-    resultsElement.innerHTML = `
-        <div class="test-item">
-            <span class="status-indicator status-success"></span>
-            <span>檢測到 ${videos.length} 個 video 元素</span>
-        </div>
-        <div class="test-item">
-            <span class="status-indicator status-info"></span>
-            <span>檢測到 ${objects.length} 個 object 元素</span>
-        </div>
-        <div class="test-item">
-            <span class="status-indicator status-info"></span>
-            <span>檢測到 ${embeds.length} 個 embed 元素</span>
-        </div>
-        <div class="test-item">
-            <span class="status-indicator status-info"></span>
-            <span>檢測到 ${iframes.length} 個 iframe 元素</span>
-        </div>
-    `;
+    resultsElement.textContent = ''; // 清空內容
+    
+    // 創建檢測結果項目
+    const createResultItem = (count, type, statusClass = 'status-info') => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'test-item';
+        
+        const indicator = document.createElement('span');
+        indicator.className = `status-indicator ${statusClass}`;
+        
+        const text = document.createElement('span');
+        text.textContent = `檢測到 ${count} 個 ${type} 元素`;
+        
+        itemDiv.appendChild(indicator);
+        itemDiv.appendChild(text);
+        return itemDiv;
+    };
+    
+    resultsElement.appendChild(createResultItem(videos.length, 'video', 'status-success'));
+    resultsElement.appendChild(createResultItem(objects.length, 'object'));
+    resultsElement.appendChild(createResultItem(embeds.length, 'embed'));
+    resultsElement.appendChild(createResultItem(iframes.length, 'iframe'));
     
     addLogEntry(`視頻檢測: ${videos.length} video, ${objects.length} object, ${embeds.length} embed, ${iframes.length} iframe`, 'info');
 }
@@ -285,18 +305,29 @@ function addDynamicVideo() {
     
     const videoItem = document.createElement('div');
     videoItem.className = 'video-item';
-    videoItem.innerHTML = `
-        <h3>動態視頻 ${videoCount}</h3>
-        <video controls muted>
-            <source src="https://www.w3schools.com/html/movie.mp4" type="video/mp4">
-            動態載入的視頻
-        </video>
-    `;
+    
+    // 創建標題
+    const h3 = document.createElement('h3');
+    h3.textContent = `動態視頻 ${videoCount}`;
+    videoItem.appendChild(h3);
+    
+    // 創建視頻元素
+    const video = document.createElement('video');
+    video.controls = true;
+    video.muted = true;
+    
+    const source = document.createElement('source');
+    source.src = 'https://www.w3schools.com/html/movie.mp4';
+    source.type = 'video/mp4';
+    
+    video.appendChild(source);
+    video.textContent = '動態載入的視頻'; // 備用文字
+    videoItem.appendChild(video);
     
     container.appendChild(videoItem);
     
     // 為新視頻設置事件監聽器
-    const newVideo = videoItem.querySelector('video');
+    const newVideo = video; // 使用已創建的 video 元素
     const events = ['play', 'pause', 'ended', 'error', 'loadedmetadata'];
     events.forEach(eventName => {
         newVideo.addEventListener(eventName, (event) => {
@@ -444,20 +475,37 @@ function addLogEntry(message, level) {
 
 // 清除事件日誌
 function clearEventLog() {
-    document.getElementById('eventTestResults').innerHTML = `
-        <div class="test-item">
-            <span class="status-indicator status-pending"></span>
-            <span>等待視頻事件...</span>
-        </div>
-    `;
+    const resultsElement = document.getElementById('eventTestResults');
+    resultsElement.textContent = ''; // 清空內容
+    
+    // 創建預設項目
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'test-item';
+    
+    const indicator = document.createElement('span');
+    indicator.className = 'status-indicator status-pending';
+    
+    const text = document.createElement('span');
+    text.textContent = '等待視頻事件...';
+    
+    itemDiv.appendChild(indicator);
+    itemDiv.appendChild(text);
+    resultsElement.appendChild(itemDiv);
+    
     videoEventCount = 0;
 }
 
 // 清除 Console 日誌
 function clearConsoleLog() {
-    document.getElementById('consoleLogOutput').innerHTML = `
-        <div class="log-entry log-info">Console 日誌已清除</div>
-    `;
+    const logOutput = document.getElementById('consoleLogOutput');
+    logOutput.textContent = ''; // 清空內容
+    
+    // 創建清除訊息
+    const entry = document.createElement('div');
+    entry.className = 'log-entry log-info';
+    entry.textContent = 'Console 日誌已清除';
+    logOutput.appendChild(entry);
+    
     logEntries = [];
 }
 
