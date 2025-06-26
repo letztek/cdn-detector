@@ -38,11 +38,15 @@
         }
         
         // 發送日誌到 background script
-        if (typeof chrome !== 'undefined' && chrome.runtime) {
-            chrome.runtime.sendMessage({
-                type: 'VIDEO_QUALITY_LOG',
-                data: { message, level, timestamp: Date.now() }
-            }).catch(() => {}); // 忽略連接錯誤
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+            try {
+                chrome.runtime.sendMessage({
+                    type: 'VIDEO_QUALITY_LOG',
+                    data: { message, level, timestamp: Date.now() }
+                }).catch(() => {}); // 忽略連接錯誤
+            } catch (error) {
+                // 忽略擴展上下文失效的錯誤
+            }
         }
     }
     
@@ -664,16 +668,25 @@
     
     // 發送視頻品質更新到 background script
     function sendVideoQualityUpdate() {
-        if (typeof chrome !== 'undefined' && chrome.runtime) {
-            const data = getVideoQualityDataForBackground();
-            
-            chrome.runtime.sendMessage({
-                type: 'VIDEO_QUALITY_UPDATE',
-                data: data
-            }).catch(error => {
-                // 連接可能已斷開，這是正常的
-                log(`Failed to send update: ${error.message}`, 'debug');
-            });
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+            try {
+                const data = getVideoQualityDataForBackground();
+                
+                chrome.runtime.sendMessage({
+                    type: 'VIDEO_QUALITY_UPDATE',
+                    data: data
+                }).catch(error => {
+                    // 連接可能已斷開，這是正常的
+                    if (error.message && !error.message.includes('Extension context invalidated')) {
+                        log(`Failed to send update: ${error.message}`, 'debug');
+                    }
+                });
+            } catch (error) {
+                // 擴展上下文可能已失效
+                if (!error.message || !error.message.includes('Extension context invalidated')) {
+                    log(`Error in sendVideoQualityUpdate: ${error.message}`, 'debug');
+                }
+            }
         }
     }
     
@@ -787,18 +800,27 @@
     log(`視頻品質監控已載入 - 平台: ${currentPlatform}`);
     
     // 向background script報告載入狀態
-    if (typeof chrome !== 'undefined' && chrome.runtime) {
-        chrome.runtime.sendMessage({
-            type: 'VIDEO_QUALITY_LOG',
-            data: {
-                message: `Video quality monitor loaded on ${window.location.href} - Platform: ${currentPlatform}`,
-                level: 'info'
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+        try {
+            chrome.runtime.sendMessage({
+                type: 'VIDEO_QUALITY_LOG',
+                data: {
+                    message: `Video quality monitor loaded on ${window.location.href} - Platform: ${currentPlatform}`,
+                    level: 'info'
+                }
+            }).then(() => {
+                console.log('Successfully reported load status to background script');
+            }).catch(error => {
+                if (!error.message || !error.message.includes('Extension context invalidated')) {
+                    console.log('Failed to send load status:', error);
+                }
+            });
+        } catch (error) {
+            // 忽略擴展上下文失效的錯誤
+            if (!error.message || !error.message.includes('Extension context invalidated')) {
+                console.log('Error sending load status:', error);
             }
-        }).then(() => {
-            console.log('Successfully reported load status to background script');
-        }).catch(error => {
-            console.log('Failed to send load status:', error);
-        });
+        }
     }
     
     // 立即檢查是否有影片元素

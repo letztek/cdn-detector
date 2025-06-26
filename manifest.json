@@ -18,7 +18,40 @@
   ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.netflix.com/*",
+        "*://*.twitch.tv/*",
+        "*://*.vimeo.com/*",
+        "*://*.dailymotion.com/*",
+        "*://*.facebook.com/*",
+        "*://*.twitter.com/*",
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*",
+        "*://*.bilibili.com/*",
+        "*://*.youku.com/*",
+        "*://*.iqiyi.com/*",
+        "*://*.v.qq.com/*",
+        "*://*.hulu.com/*",
+        "*://*.amazon.com/gp/video/*",
+        "*://*.primevideo.com/*",
+        "*://*.disneyplus.com/*",
+        "*://*.hbomax.com/*",
+        "*://*.peacocktv.com/*",
+        "*://*.paramountplus.com/*",
+        "*://*.gagaoolala.com/*",
+        "*://*.coursera.org/*",
+        "*://*.udemy.com/*",
+        "*://*.khanacademy.org/*",
+        "*://*.edx.org/*",
+        "*://*.linkedin.com/learning/*",
+        "*://*.skillshare.com/*",
+        "*://*.masterclass.com/*",
+        "*://*.pluralsight.com/*",
+        "*://localhost/*",
+        "*://127.0.0.1/*",
+        "file:///*"
+      ],
       "js": ["video-quality-monitor.js"],
       "run_at": "document_end",
       "all_frames": true
@@ -30,7 +63,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js", "test-content-script.html"],
+      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js", "test-content-script.html", "test-content-script.js"],
       "matches": ["<all_urls>"]
     }
   ],
