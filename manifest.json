@@ -71,12 +71,7 @@
     "default_popup": "popup.html",
     "default_icon": "icon.png"
   },
-  "web_accessible_resources": [
-    {
-      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js", "test-content-script.html", "test-content-script.js", "qoe-dashboard.html", "test-qoe-dashboard.html", "test-realtime-video-quality.html"],
-      "matches": ["<all_urls>"]
-    }
-  ],
+
   "externally_connectable": {
     "matches": [
       "file://*/*",
