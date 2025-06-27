@@ -844,10 +844,10 @@
 <body>
   <h1 class="main-title">CDN Detector</h1>
   
-  <!-- 標籤頁導航 - 隱藏影片品質標籤 -->
-  <div class="tab-navigation" style="display: none;">
+  <!-- 標籤頁導航 -->
+  <div class="tab-navigation">
     <button class="tab-button active" data-tab="cdn">CDN 檢測</button>
-    <button class="tab-button" data-tab="video" style="display: none;">影片品質</button>
+    <button class="tab-button" data-tab="video">影片品質</button>
   </div>
   
   <!-- 分頁隔離提示 (已隱藏) -->
@@ -917,8 +917,8 @@
     </div>
   </div>
   
-  <!-- 影片品質標籤頁內容 - 已隱藏 -->
-  <div id="video-tab" class="tab-content" style="display: none !important;">
+  <!-- 影片品質標籤頁內容 -->
+  <div id="video-tab" class="tab-content" style="display: none;">
     <!-- 影片品質檢測狀態 -->
     <div class="status-section">
       <p><span class="status-indicator" id="videoStatusIndicator"></span>影片監控：<span id="videoStatus">未檢測到影片</span></p>
@@ -983,14 +983,24 @@
             <span class="info-label">播放狀態：</span>
             <span id="playbackState">未知</span>
           </div>
-          <div class="info-item">
-            <span class="info-label">音量：</span>
-            <span id="volume">100%</span>
-          </div>
+          <!-- 音量顯示已移除，因為無法穩定獲取音量數據 -->
         </div>
       </div>
     </div>
     
+    <!-- QoE Performance Dashboard 連結 -->
+    <div class="qoe-dashboard-section" style="background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #dee2e6;">
+      <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 16px; display: flex; align-items: center;">
+        📊 QoE Performance Dashboard
+      </h3>
+      <p style="margin: 0 0 12px 0; font-size: 13px; color: #666;">
+        查看詳細的 Quality of Experience (QoE) 指標分析和歷史趨勢
+      </p>
+      <button id="openQoEDashboard" class="action-btn primary" style="background: linear-gradient(45deg, #667eea, #764ba2); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
+        🚀 開啟 QoE Dashboard
+      </button>
+    </div>
+
     <!-- 影片品質歷史記錄 -->
     <div class="video-quality-history" id="videoQualityHistory">
       <h3>📊 品質歷史記錄</h3>

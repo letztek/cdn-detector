@@ -1462,113 +1462,113 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // CDN 檢測相關消息
     if (message.type === 'ping' || message.type === 'PING') {
       sendResponse({ type: 'pong', status: 'ok', extensionId: chrome.runtime.id });
-      return;
-    }
-    
-    if (message.type === 'toggleDetection') {
-      cdnDetectionEnabled = message.enabled;
-      chrome.storage.local.set({ cdnDetectionEnabled }, () => {
-        if (chrome.runtime.lastError) {
-          console.error('Failed to save detection state:', chrome.runtime.lastError);
-          return;
-        }
-      });
-      
-      logMessage(`CDN Detection toggled: ${cdnDetectionEnabled ? 'Enabled' : 'Disabled'}`);
-
-      if (cdnDetectionEnabled) {
-        startListening();
-      } else {
-        stopListening();
+    return;
+  }
+  
+  if (message.type === 'toggleDetection') {
+    cdnDetectionEnabled = message.enabled;
+    chrome.storage.local.set({ cdnDetectionEnabled }, () => {
+      if (chrome.runtime.lastError) {
+        console.error('Failed to save detection state:', chrome.runtime.lastError);
+        return;
       }
+    });
+    
+    logMessage(`CDN Detection toggled: ${cdnDetectionEnabled ? 'Enabled' : 'Disabled'}`);
+
+    if (cdnDetectionEnabled) {
+      startListening();
+    } else {
+      stopListening();
+    }
       sendResponse({ success: true });
       return;
-    }
-    
-    if (message.type === 'getCurrentTabDetection') {
-      getCurrentTabInfo((tab) => {
-        if (tab) {
-          const tabData = tabDetectionData[tab.id] || {
-            tabId: tab.id,
-            url: tab.url,
-            title: tab.title,
-            detectionLog: [],
-            cdnStats: { 
-              cdnCount: 0, 
-              nonCdnCount: 0, 
-              totalRequests: 0,
-              hitCount: 0,
-              missCount: 0,
-              unknownCacheCount: 0,
-              hitTotalSize: 0,
-              missTotalSize: 0,
-              unknownTotalSize: 0
-            }
-          };
-          sendResponse({
-            type: 'currentTabDetectionResponse',
-            data: tabData
-          });
-        } else {
-          sendResponse({
-            type: 'currentTabDetectionResponse',
-            error: 'No active tab found',
-            data: null
-          });
-        }
-      });
-      return true; // 保持 sendResponse 活躍
-    }
-    
-    if (message.type === 'getDetectionLog') {
-      getCurrentTabInfo((tab) => {
-        if (tab && tabDetectionData[tab.id]) {
-          sendResponse({
-            type: 'detectionLogResponse',
-            data: tabDetectionData[tab.id].detectionLog || []
-          });
-        } else {
-          sendResponse({
-            type: 'detectionLogResponse',
-            error: 'No tab data found',
-            data: []
-          });
-        }
-      });
-      return true; // 保持 sendResponse 活躍
-    }
-    
-    if (message.type === 'clearDetectionLog') {
-      getCurrentTabInfo((tab) => {
-        if (tab && tabDetectionData[tab.id]) {
-          logMessage(`Clearing detection log for tab ${tab.id}`);
-          tabDetectionData[tab.id] = {
-            tabId: tab.id,
-            url: tab.url,
-            title: tab.title,
-            detectionLog: [],
-            cdnStats: { 
-              cdnCount: 0, 
-              nonCdnCount: 0, 
-              totalRequests: 0, 
-              hitCount: 0,
-              missCount: 0,
-              unknownCacheCount: 0,
-              hitTotalSize: 0,
-              missTotalSize: 0,
-              unknownTotalSize: 0,
-              hitTotalTime: 0,
-              missTotalTime: 0,
-              unknownTotalTime: 0,
-              lastUpdated: new Date().toISOString() 
-            }
-          };
-          logMessage(`Tab ${tab.id} detection data reset`);
-        }
-        
-        chrome.storage.local.remove(['debugLogs'], () => {
-          logMessage('Debug logs cleared');
+  }
+  
+  if (message.type === 'getCurrentTabDetection') {
+    getCurrentTabInfo((tab) => {
+      if (tab) {
+        const tabData = tabDetectionData[tab.id] || {
+          tabId: tab.id,
+          url: tab.url,
+          title: tab.title,
+          detectionLog: [],
+          cdnStats: { 
+        cdnCount: 0, 
+        nonCdnCount: 0, 
+        totalRequests: 0,
+        hitCount: 0,
+        missCount: 0,
+        unknownCacheCount: 0,
+        hitTotalSize: 0,
+        missTotalSize: 0,
+        unknownTotalSize: 0
+      }
+        };
+        sendResponse({
+          type: 'currentTabDetectionResponse',
+          data: tabData
         });
+      } else {
+        sendResponse({
+          type: 'currentTabDetectionResponse',
+          error: 'No active tab found',
+          data: null
+        });
+      }
+    });
+    return true; // 保持 sendResponse 活躍
+  }
+  
+  if (message.type === 'getDetectionLog') {
+    getCurrentTabInfo((tab) => {
+      if (tab && tabDetectionData[tab.id]) {
+        sendResponse({
+          type: 'detectionLogResponse',
+          data: tabDetectionData[tab.id].detectionLog || []
+        });
+      } else {
+      sendResponse({
+        type: 'detectionLogResponse',
+          error: 'No tab data found',
+          data: []
+      });
+      }
+    });
+    return true; // 保持 sendResponse 活躍
+  }
+  
+  if (message.type === 'clearDetectionLog') {
+    getCurrentTabInfo((tab) => {
+      if (tab && tabDetectionData[tab.id]) {
+        logMessage(`Clearing detection log for tab ${tab.id}`);
+        tabDetectionData[tab.id] = {
+          tabId: tab.id,
+          url: tab.url,
+          title: tab.title,
+          detectionLog: [],
+        cdnStats: { 
+      cdnCount: 0, 
+      nonCdnCount: 0, 
+      totalRequests: 0, 
+      hitCount: 0,
+      missCount: 0,
+      unknownCacheCount: 0,
+      hitTotalSize: 0,
+      missTotalSize: 0,
+      unknownTotalSize: 0,
+            hitTotalTime: 0,
+            missTotalTime: 0,
+            unknownTotalTime: 0,
+      lastUpdated: new Date().toISOString() 
+    }
+        };
+        logMessage(`Tab ${tab.id} detection data reset`);
+      }
+      
+      chrome.storage.local.remove(['debugLogs'], () => {
+        logMessage('Debug logs cleared');
+      });
       });
       sendResponse({ success: true });
       return;
@@ -1854,6 +1854,76 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         
         return true; // 保持消息通道開放
+        break;
+        
+      // Task 22.4: QoE 指標相關訊息處理
+      case 'GET_QOE_METRICS':
+        const qoeTabId = message.tabId || tabId;
+        
+        if (qoeTabId && videoQualityData.tabs[qoeTabId]) {
+          const qoeMetrics = qoeCalculator.calculateAllMetrics(qoeTabId);
+          sendResponse({ 
+            success: true, 
+            qoeMetrics: qoeMetrics,
+            tabId: qoeTabId,
+            timestamp: Date.now()
+          });
+        } else {
+          sendResponse({ 
+            success: false, 
+            error: 'No video quality data available for this tab',
+            tabId: qoeTabId
+          });
+        }
+        break;
+        
+      case 'GET_ALL_QOE_METRICS':
+        try {
+          const allQoEMetrics = {};
+          
+          Object.keys(videoQualityData.tabs).forEach(tabId => {
+            const qoeMetrics = qoeCalculator.calculateAllMetrics(tabId);
+            if (qoeMetrics) {
+              allQoEMetrics[tabId] = qoeMetrics;
+            }
+          });
+          
+          sendResponse({ 
+            success: true, 
+            allQoEMetrics: allQoEMetrics,
+            tabCount: Object.keys(allQoEMetrics).length,
+            timestamp: Date.now()
+          });
+        } catch (error) {
+          sendResponse({ 
+            success: false, 
+            error: error.message 
+          });
+        }
+        break;
+        
+      case 'GET_QOE_THRESHOLDS':
+        sendResponse({
+          success: true,
+          thresholds: qoeCalculator.thresholds,
+          timestamp: Date.now()
+        });
+        break;
+        
+      case 'UPDATE_QOE_THRESHOLDS':
+        if (message.thresholds) {
+          Object.assign(qoeCalculator.thresholds, message.thresholds);
+          sendResponse({
+            success: true,
+            updatedThresholds: qoeCalculator.thresholds,
+            timestamp: Date.now()
+          });
+        } else {
+          sendResponse({
+            success: false,
+            error: 'No thresholds provided'
+          });
+        }
         break;
         
       default:
@@ -2209,7 +2279,7 @@ function startListening() {
           // 只有在該標籤頁沒有檢測到任何 CDN 時才顯示紅色圖標
           if (tabData.cdnStats.cdnCount === 0) {
             // 暫時註解圖標設定避免錯誤
-            // chrome.action.setIcon({ path: 'icon-red.png' });
+            // chrome.action.setIcon({ path: 'icon.png' });
           }
         }
         
@@ -2385,7 +2455,7 @@ function stopListening() {
   // 清理請求時間記錄
   requestStartTimes = {};
   
-  chrome.action.setIcon({ path: 'icon-red.png' });
+  chrome.action.setIcon({ path: 'icon.png' });
   
   logMessage('CDN detection listener stopped');
 }
@@ -2429,17 +2499,271 @@ setInterval(() => {
       }
     }
   });
-}, 60 * 60 * 1000); // 每小時執行一次
+}, 60 * 60 * 1000); // 每小時執行一次 
 
 // ==================== 視頻品質監控系統 ====================
+
+// Task 22.4: QoE Metric Calculation Engine
+// 七個關鍵 QoE 指標計算引擎
+
+const QOE_METRICS = {
+  STREAM_DETECTION: 'stream_detection',
+  RESOLUTION: 'resolution',
+  DRM_PROTECTION: 'drm_protection',
+  STARTUP_TIME: 'startup_time',
+  REBUFFERING_RATIO: 'rebuffering_ratio',
+  BITRATE_VS_BANDWIDTH: 'bitrate_vs_bandwidth',
+  ERROR_RATE: 'error_rate',
+  DOWNLOADED_DATA: 'downloaded_data'
+};
+
+// QoE 指標計算引擎
+class QoEMetricCalculator {
+  constructor() {
+    this.metrics = new Map();
+    this.thresholds = {
+      goodStartupTime: 2000, // 2 秒
+      acceptableStartupTime: 5000, // 5 秒
+      lowRebufferingRatio: 0.01, // 1%
+      highRebufferingRatio: 0.05, // 5%
+      goodBandwidthUtilization: 0.8, // 80%
+      lowErrorRate: 0.001, // 0.1%
+      highErrorRate: 0.01 // 1%
+    };
+  }
+
+  // 1. 串流檢測指標
+  calculateStreamDetection(videoData, manifestData, segmentData) {
+    try {
+      const metric = {
+        type: QOE_METRICS.STREAM_DETECTION,
+        timestamp: Date.now(),
+        detected: false,
+        streamType: 'unknown',
+        confidence: 0,
+        score: 0,
+        details: {}
+      };
+
+      // 檢查是否有視頻元素
+      if (videoData && Object.keys(videoData).length > 0) {
+        metric.detected = true;
+        metric.confidence += 30;
+      }
+
+      // 檢查是否有 manifest 數據
+      if (manifestData && Object.keys(manifestData).length > 0) {
+        metric.detected = true;
+        metric.confidence += 40;
+        
+        // 判斷串流類型
+        const manifestTypes = Object.values(manifestData).map(m => m.type);
+        if (manifestTypes.includes('DASH')) {
+          metric.streamType = 'DASH';
+        } else if (manifestTypes.includes('HLS')) {
+          metric.streamType = 'HLS';
+        }
+      }
+
+      // 檢查是否有媒體片段數據
+      if (segmentData && Object.keys(segmentData).length > 0) {
+        metric.detected = true;
+        metric.confidence += 30;
+      }
+
+      metric.confidence = Math.min(metric.confidence, 100);
+      metric.score = metric.detected ? (metric.confidence / 100) * 100 : 0;
+
+      return metric;
+    } catch (error) {
+      logMessage(`Error calculating stream detection: ${error.message}`, 'error');
+      return null;
+    }
+  }
+
+  // 2. 即時串流解析度指標
+  calculateResolution(videoData, manifestData) {
+    try {
+      const metric = {
+        type: QOE_METRICS.RESOLUTION,
+        timestamp: Date.now(),
+        currentResolution: null,
+        availableResolutions: [],
+        adaptiveStreaming: false,
+        score: 0,
+        details: {}
+      };
+
+      // 從視頻元素獲取當前解析度
+      if (videoData) {
+        Object.values(videoData).forEach(video => {
+          if (video.videoWidth && video.videoHeight) {
+            const resolution = `${video.videoWidth}x${video.videoHeight}`;
+            metric.currentResolution = resolution;
+            
+            // 計算解析度分數 (基於常見解析度標準)
+            const height = video.videoHeight;
+            if (height >= 2160) metric.score = 100; // 4K
+            else if (height >= 1440) metric.score = 90; // 1440p
+            else if (height >= 1080) metric.score = 80; // 1080p
+            else if (height >= 720) metric.score = 70; // 720p
+            else if (height >= 480) metric.score = 50; // 480p
+            else metric.score = 30; // 低解析度
+          }
+        });
+      }
+
+      // 從 manifest 獲取可用解析度
+      if (manifestData) {
+        Object.values(manifestData).forEach(manifest => {
+          if (manifest.representations) {
+            manifest.representations.forEach(rep => {
+              if (rep.width && rep.height) {
+                const resolution = `${rep.width}x${rep.height}`;
+                if (!metric.availableResolutions.includes(resolution)) {
+                  metric.availableResolutions.push(resolution);
+                }
+              }
+            });
+          }
+        });
+        
+        metric.adaptiveStreaming = metric.availableResolutions.length > 1;
+      }
+
+      return metric;
+    } catch (error) {
+      logMessage(`Error calculating resolution: ${error.message}`, 'error');
+      return null;
+    }
+  }
+
+  // 3. DRM 保護狀態指標
+  calculateDRMProtection(manifestData, videoData) {
+    try {
+      const metric = {
+        type: QOE_METRICS.DRM_PROTECTION,
+        timestamp: Date.now(),
+        protected: false,
+        drmSystems: [],
+        score: 100, // 預設為 100，DRM 不影響品質分數
+        details: {}
+      };
+
+      // 檢查 manifest 中的 DRM 資訊
+      if (manifestData) {
+        Object.values(manifestData).forEach(manifest => {
+          if (manifest.drmProtection) {
+            metric.protected = true;
+            if (manifest.drmSystems) {
+              metric.drmSystems = [...new Set([...metric.drmSystems, ...manifest.drmSystems])];
+            }
+          }
+        });
+      }
+
+      return metric;
+    } catch (error) {
+      logMessage(`Error calculating DRM protection: ${error.message}`, 'error');
+      return null;
+    }
+  }
+
+  // 4. 視頻啟動時間指標
+  calculateStartupTime(videoData, eventHistory) {
+    try {
+      const metric = {
+        type: QOE_METRICS.STARTUP_TIME,
+        timestamp: Date.now(),
+        startupTime: null,
+        score: 0,
+        details: {}
+      };
+
+      if (eventHistory && eventHistory.length > 0) {
+        // 尋找 loadstart 到 canplay 或 play 事件的時間差
+        const loadStartEvent = eventHistory.find(e => e.type === 'loadstart');
+        const playableEvent = eventHistory.find(e => e.type === 'canplay' || e.type === 'play');
+
+        if (loadStartEvent && playableEvent) {
+          metric.startupTime = playableEvent.timestamp - loadStartEvent.timestamp;
+          
+          // 計算啟動時間分數
+          if (metric.startupTime <= this.thresholds.goodStartupTime) {
+            metric.score = 100;
+          } else if (metric.startupTime <= this.thresholds.acceptableStartupTime) {
+            metric.score = 80 - ((metric.startupTime - this.thresholds.goodStartupTime) / 
+                                (this.thresholds.acceptableStartupTime - this.thresholds.goodStartupTime)) * 30;
+          } else {
+            metric.score = Math.max(20, 50 - (metric.startupTime - this.thresholds.acceptableStartupTime) / 1000 * 5);
+          }
+        }
+      }
+
+      return metric;
+    } catch (error) {
+      logMessage(`Error calculating startup time: ${error.message}`, 'error');
+      return null;
+    }
+  }
+
+  // 主要計算函數
+  calculateAllMetrics(tabId) {
+    try {
+      const tabData = videoQualityData.tabs[tabId];
+      if (!tabData) {
+        return null;
+      }
+
+      const manifestData = manifestMap[tabId] || {};
+      const segmentData = mediaSegmentMap[tabId] || {};
+      const videoData = tabData.videos || {};
+      const eventHistory = tabData.eventHistory || [];
+      const errorHistory = tabData.errors || [];
+
+      const metrics = [
+        this.calculateStreamDetection(videoData, manifestData, segmentData),
+        this.calculateResolution(videoData, manifestData),
+        this.calculateDRMProtection(manifestData, videoData),
+        this.calculateStartupTime(videoData, eventHistory)
+      ].filter(metric => metric !== null);
+
+      // 計算綜合分數
+      let totalScore = 0;
+      let validMetrics = 0;
+      
+      metrics.forEach(metric => {
+        if (metric.score !== undefined) {
+          totalScore += metric.score;
+          validMetrics++;
+        }
+      });
+
+      const overallScore = validMetrics > 0 ? Math.round(totalScore / validMetrics) : 0;
+
+      return {
+        tabId: tabId,
+        metrics: metrics,
+        overallScore: { score: overallScore, timestamp: Date.now() },
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      logMessage(`Error calculating QoE metrics for tab ${tabId}: ${error.message}`, 'error');
+      return null;
+    }
+  }
+}
+
+// 建立 QoE 計算器實例
+const qoeCalculator = new QoEMetricCalculator();
 
 // 視頻品質數據存儲
 let videoQualityData = {
   global: {
     totalVideos: 0,
     activeVideos: 0,
-    lastUpdate: Date.now(),
     platforms: {},
+    lastUpdate: Date.now(),
     errors: []
   },
   tabs: {} // 按 tab 分組的視頻數據
@@ -2491,6 +2815,28 @@ function handleVideoQualityUpdate(tabId, data) {
           };
         }
       });
+    }
+    
+    // 更新事件歷史
+    if (data.events && Array.isArray(data.events)) {
+      if (!tabData.eventHistory) {
+        tabData.eventHistory = [];
+      }
+      tabData.eventHistory.push(...data.events);
+      
+      // 限制事件歷史長度
+      if (tabData.eventHistory.length > 1000) {
+        tabData.eventHistory = tabData.eventHistory.slice(-500);
+      }
+    }
+    
+    // Task 22.4: 計算 QoE 指標
+    if (tabData.activeVideos > 0) {
+      const qoeMetrics = qoeCalculator.calculateAllMetrics(tabId);
+      if (qoeMetrics) {
+        tabData.qoeMetrics = qoeMetrics;
+        logMessage(`QoE metrics calculated for tab ${tabId}: Overall score ${qoeMetrics.overallScore.score}`, 'info');
+      }
     }
     
     // 更新全域統計
@@ -2729,7 +3075,6 @@ chrome.storage.local.get(['cdnDetectionEnabled'], (result) => {
   }
 });
 
-// 設置初始圖標
-chrome.action.setIcon({ path: 'icon-red.png' });
+chrome.action.setIcon({ path: 'icon.png' });
 
 logMessage('Background script initialized successfully', 'info'); 

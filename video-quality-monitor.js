@@ -26,7 +26,7 @@
     
     // 配置參數
     const CONFIG = {
-        UPDATE_INTERVAL: 3000, // 3秒更新間隔
+        UPDATE_INTERVAL: 500, // 0.5秒更新間隔，實現即時監控
         MAX_ERRORS: 50,
         DEBUG_MODE: true
     };
@@ -69,15 +69,34 @@
     
     // 生成唯一 ID
     function generateVideoId(videoElement) {
+        // 如果已經有保存的 ID，直接返回
+        if (videoElement.dataset && videoElement.dataset.videoMonitorId) {
+            return videoElement.dataset.videoMonitorId;
+        }
+        
+        // 生成穩定的 ID（基於視頻的穩定屬性）
         const src = videoElement.src || videoElement.currentSrc || '';
         const id = videoElement.id || '';
         const className = videoElement.className || '';
-        return `${currentPlatform}_${Date.now()}_${btoa(src + id + className).substring(0, 10)}`;
+        const tagName = videoElement.tagName || 'VIDEO';
+        
+        // 創建穩定的 ID（移除 Date.now()）
+        const stableId = `${currentPlatform}_${tagName}_${btoa(src + id + className).substring(0, 10)}`;
+        
+        // 保存 ID 到視頻元素上，確保後續使用相同的 ID
+        if (videoElement.dataset) {
+            videoElement.dataset.videoMonitorId = stableId;
+        }
+        
+        log(`生成穩定視頻ID: ${stableId}`);
+        return stableId;
     }
     
     // 視頻品質數據收集
     function collectVideoQualityMetrics(videoElement, videoId) {
         try {
+            log(`收集視頻指標，使用videoId: ${videoId}`);
+            
             const metrics = {
                 id: videoId,
                 platform: currentPlatform,
@@ -130,6 +149,158 @@
                     corruptedVideoFrames: quality.corruptedVideoFrames || 0,
                     creationTime: quality.creationTime || 0
                 };
+            }
+            
+            // 收集位元率和幀率數據
+            try {
+                // 方法1: 從 MediaStream API 獲取幀率
+                if (videoElement.srcObject && videoElement.srcObject.getVideoTracks) {
+                    try {
+                        const tracks = videoElement.srcObject.getVideoTracks();
+                        if (tracks.length > 0) {
+                            const settings = tracks[0].getSettings();
+                            if (settings.frameRate) {
+                                metrics.frameRate = Math.round(settings.frameRate);
+                                metrics.frameRateSource = 'MediaStream API';
+                                log(`幀率來源: MediaStream API - ${metrics.frameRate} fps`);
+                            }
+                        }
+                    } catch (e) {
+                        log(`MediaStream API 失敗: ${e.message}`);
+                    }
+                }
+                
+                // 方法2: 真實幀率計算 (使用最近5個測量點，嚴格按照 FPS = 幀數/經過時間)
+                if (!metrics.frameRate && metrics.playbackQuality) {
+                    const currentTime = Date.now();
+                    // 使用傳入的 videoId 參數，不要重新生成
+                    const videoData = videoQualityData.videos.get(videoId);
+                    
+                    log(`FPS計算使用videoId: ${videoId}, 找到videoData: ${!!videoData}`);
+                    
+                    if (videoData && videoData.metrics && videoData.metrics.length > 0) {
+                        // 獲取最近5個有效的測量點
+                        const recentMetrics = videoData.metrics
+                            .filter(m => m.playbackQuality && m.playbackQuality.totalVideoFrames > 0)
+                            .slice(-5); // 最近5個測量點
+                        
+                        if (recentMetrics.length >= 1) { // 至少需要1個歷史測量點
+                            const validSamples = [];
+                            
+                            // 檢查每個測量點，計算有效樣本
+                            for (let i = 0; i < recentMetrics.length; i++) {
+                                const prevMetric = recentMetrics[i];
+                                const timeDiff = (currentTime - prevMetric.timestamp) / 1000; // 秒
+                                const frameDiff = metrics.playbackQuality.totalVideoFrames - prevMetric.playbackQuality.totalVideoFrames;
+                                
+                                // 樣本間隔至少0.5秒，且有幀數變化
+                                if (timeDiff >= 0.5 && frameDiff > 0) {
+                                    const sampleFPS = frameDiff / timeDiff;
+                                    // 只接受合理的幀率值 (5-120 FPS)
+                                    if (sampleFPS >= 5 && sampleFPS <= 120) {
+                                        validSamples.push({
+                                            fps: sampleFPS,
+                                            timeDiff: timeDiff,
+                                            frameDiff: frameDiff,
+                                            timestamp: prevMetric.timestamp
+                                        });
+                                        log(`有效FPS樣本: ${sampleFPS.toFixed(2)} fps (幀差=${frameDiff}, 時差=${timeDiff.toFixed(2)}s)`);
+                                    }
+                                }
+                            }
+                            
+                            // 至少需要2個有效樣本才能計算平均值
+                            if (validSamples.length >= 2) {
+                                // 計算加權平均值（較新的樣本權重更高）
+                                let totalWeightedFPS = 0;
+                                let totalWeight = 0;
+                                
+                                validSamples.forEach((sample, index) => {
+                                    const weight = index + 1; // 越新的樣本權重越高
+                                    totalWeightedFPS += sample.fps * weight;
+                                    totalWeight += weight;
+                                });
+                                
+                                const averageFPS = totalWeightedFPS / totalWeight;
+                                metrics.frameRate = Math.round(averageFPS * 10) / 10; // 保留1位小數
+                                metrics.frameRateSource = 'Calculated (averaged)';
+                                metrics.frameRateSamples = validSamples.length;
+                                
+                                log(`✅ 真實FPS計算完成: ${metrics.frameRate} fps (基於${validSamples.length}個樣本的加權平均)`);
+                                
+                                // 記錄計算詳情用於調試
+                                metrics.frameRateDetails = {
+                                    samples: validSamples.map(s => ({
+                                        fps: Math.round(s.fps * 10) / 10,
+                                        timeDiff: Math.round(s.timeDiff * 100) / 100,
+                                        frameDiff: s.frameDiff
+                                    })),
+                                    average: Math.round(averageFPS * 10) / 10,
+                                    method: 'weighted_average_of_recent_samples'
+                                };
+                            } else if (validSamples.length === 1) {
+                                // 只有1個樣本，暫時使用但標記為不完整
+                                metrics.frameRate = Math.round(validSamples[0].fps * 10) / 10;
+                                metrics.frameRateSource = 'Calculated (single sample)';
+                                metrics.frameRateSamples = 1;
+                                log(`⚠️ 暫時FPS計算: ${metrics.frameRate} fps (僅1個樣本，需要更多數據)`);
+                            } else {
+                                log(`❌ 無法計算FPS: 沒有足夠的有效樣本 (需要至少2個，間隔≥0.5秒)`);
+                            }
+                        } else {
+                            log(`📊 FPS計算等待中: 需要歷史測量點進行比較`);
+                        }
+                    }
+                }
+                
+                // 方法3: 從視頻元素屬性獲取
+                if (!metrics.frameRate) {
+                    // 嘗試從 videoElement 的各種屬性獲取
+                    if (videoElement.mozPaintedFrames !== undefined && videoElement.mozFrameDelay !== undefined) {
+                        // Firefox 特有屬性
+                        const fps = Math.round(1000 / videoElement.mozFrameDelay);
+                        if (fps >= 5 && fps <= 120) {
+                            metrics.frameRate = fps;
+                            metrics.frameRateSource = 'Firefox mozFrameDelay';
+                            log(`幀率來源: Firefox mozFrameDelay - ${metrics.frameRate} fps`);
+                        }
+                    }
+                }
+                
+                // 如果無法通過任何方法獲得真實幀率，就不提供值
+                if (!metrics.frameRate) {
+                    log(`❌ 無法獲得真實幀率數據 - 不提供推測值`);
+                    metrics.frameRateSource = 'Not available';
+                }
+                
+                // 嘗試從網路層推算位元率 (基於下載速度)
+                if (videoElement.buffered && videoElement.buffered.length > 0) {
+                    const bufferedEnd = videoElement.buffered.end(videoElement.buffered.length - 1);
+                    const bufferedStart = videoElement.buffered.start(0);
+                    const bufferedDuration = bufferedEnd - bufferedStart;
+                    
+                    // 估算位元率 (這是一個粗略的估算)
+                    if (bufferedDuration > 0 && videoElement.duration > 0) {
+                        metrics.estimatedBitrate = {
+                            bufferedDuration: bufferedDuration,
+                            totalDuration: videoElement.duration,
+                            bufferRatio: bufferedDuration / videoElement.duration
+                        };
+                    }
+                }
+                
+                // 收集網路狀態信息
+                if (navigator.connection) {
+                    metrics.networkInfo = {
+                        effectiveType: navigator.connection.effectiveType,
+                        downlink: navigator.connection.downlink,
+                        rtt: navigator.connection.rtt,
+                        saveData: navigator.connection.saveData
+                    };
+                }
+                
+            } catch (error) {
+                log(`Error collecting bitrate/framerate data: ${error.message}`, 'error');
             }
             
             // 平台特定數據收集

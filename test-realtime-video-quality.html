@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>即時影片品質監控測試</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .status-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .status-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .status-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        .status-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .test-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .test-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+        .test-button:hover {
+            background: #218838;
+        }
+        .test-button.secondary {
+            background: #17a2b8;
+        }
+        .test-button.secondary:hover {
+            background: #138496;
+        }
+        .test-button.warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        .test-button.warning:hover {
+            background: #e0a800;
+        }
+        .log-section {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .log-content {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        video {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        .metric-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .metric-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+        .real-time-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-left: 8px;
+            animation: pulse 2s infinite;
+        }
+        .real-time-indicator.active {
+            background: #28a745;
+        }
+        .real-time-indicator.inactive {
+            background: #dc3545;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .extension-status {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .extension-status.connected {
+            background: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .extension-status.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 即時影片品質監控測試</h1>
+            <p>測試 CDN Detector 擴充功能的即時影片品質數據顯示功能</p>
+            <div id="extensionStatus" class="extension-status">
+                <strong>擴充功能狀態：</strong> <span id="statusText">檢查中...</span>
+                <span class="real-time-indicator" id="statusIndicator"></span>
+            </div>
+        </div>
+
+        <div class="status-section">
+            <div class="status-card">
+                <h3>監控狀態</h3>
+                <div class="value" id="monitorStatus">等待中</div>
+                <small id="lastUpdate">尚未更新</small>
+            </div>
+            <div class="status-card">
+                <h3>偵測到的影片</h3>
+                <div class="value" id="videoCount">0</div>
+                <small>個影片元素</small>
+            </div>
+            <div class="status-card">
+                <h3>更新頻率</h3>
+                <div class="value" id="updateFreq">0</div>
+                <small>次/分鐘</small>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎮 測試控制</h3>
+            <button class="test-button" onclick="startMonitoring()">開始監控</button>
+            <button class="test-button secondary" onclick="stopMonitoring()">停止監控</button>
+            <button class="test-button secondary" onclick="testExtensionConnection()">測試擴充功能連接</button>
+            <button class="test-button warning" onclick="openPopup()">開啟擴充功能 Popup</button>
+            <button class="test-button warning" onclick="openQoEDashboard()">開啟 QoE Dashboard</button>
+            <button class="test-button" onclick="clearLogs()">清除日誌</button>
+        </div>
+
+        <div class="video-container">
+            <h3>🎥 測試影片</h3>
+            <video id="testVideo" controls preload="metadata" style="width: 600px;">
+                <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+                <source src="https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4" type="video/mp4">
+                您的瀏覽器不支援 HTML5 影片播放。
+            </video>
+            <br>
+            <small>如果影片無法載入，請檢查網路連線或嘗試其他影片來源</small>
+        </div>
+
+        <div class="metrics-grid" id="metricsGrid">
+            <div class="metric-card">
+                <div class="metric-label">解析度</div>
+                <div class="metric-value" id="resolution">N/A</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">幀率</div>
+                <div class="metric-value" id="frameRate">N/A</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">位元率</div>
+                <div class="metric-value" id="bitrate">N/A</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">緩衝事件</div>
+                <div class="metric-value" id="bufferEvents">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">播放狀態</div>
+                <div class="metric-value" id="playbackState">未知</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">網路狀態</div>
+                <div class="metric-value" id="networkState">N/A</div>
+            </div>
+        </div>
+
+        <div class="log-section">
+            <h3>📊 即時監控日誌</h3>
+            <div class="log-content" id="logContent">等待監控數據...\n</div>
+        </div>
+    </div>
+
+    <script>
+        let isMonitoring = false;
+        let updateCount = 0;
+        let startTime = Date.now();
+        let monitoringInterval = null;
+
+        // 檢查擴充功能連接狀態
+        function checkExtensionConnection() {
+            const statusElement = document.getElementById('statusText');
+            const indicatorElement = document.getElementById('statusIndicator');
+            const statusContainer = document.getElementById('extensionStatus');
+
+            if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+                statusElement.textContent = '擴充功能未安裝或未啟用';
+                indicatorElement.className = 'real-time-indicator inactive';
+                statusContainer.className = 'extension-status error';
+                return false;
+            }
+
+            try {
+                chrome.runtime.sendMessage({ type: 'ping' }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        statusElement.textContent = '擴充功能連接失敗';
+                        indicatorElement.className = 'real-time-indicator inactive';
+                        statusContainer.className = 'extension-status error';
+                        log('❌ 擴充功能連接失敗: ' + chrome.runtime.lastError.message);
+                    } else {
+                        statusElement.textContent = '擴充功能連接正常';
+                        indicatorElement.className = 'real-time-indicator active';
+                        statusContainer.className = 'extension-status connected';
+                        log('✅ 擴充功能連接成功');
+                    }
+                });
+                return true;
+            } catch (error) {
+                statusElement.textContent = '擴充功能連接錯誤';
+                indicatorElement.className = 'real-time-indicator inactive';
+                statusContainer.className = 'extension-status error';
+                log('❌ 擴充功能連接錯誤: ' + error.message);
+                return false;
+            }
+        }
+
+        function testExtensionConnection() {
+            log('🔍 測試擴充功能連接...');
+            checkExtensionConnection();
+        }
+
+        function startMonitoring() {
+            if (isMonitoring) {
+                log('⚠️ 監控已在運行中');
+                return;
+            }
+
+            isMonitoring = true;
+            updateCount = 0;
+            startTime = Date.now();
+            
+            document.getElementById('monitorStatus').textContent = '監控中';
+            log('🚀 開始即時監控...');
+
+            // 每1秒檢查一次影片品質數據
+            monitoringInterval = setInterval(() => {
+                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                    chrome.runtime.sendMessage({ type: 'GET_VIDEO_QUALITY_DATA' }, (response) => {
+                        if (!chrome.runtime.lastError && response) {
+                            updateCount++;
+                            updateMetricsDisplay(response);
+                            updateFrequencyDisplay();
+                            document.getElementById('lastUpdate').textContent = '最後更新: ' + new Date().toLocaleTimeString();
+                        }
+                    });
+                }
+            }, 1000);
+
+            log('✅ 即時監控已啟動 (每1秒更新)');
+        }
+
+        function stopMonitoring() {
+            if (!isMonitoring) {
+                log('⚠️ 監控未在運行');
+                return;
+            }
+
+            isMonitoring = false;
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+            }
+
+            document.getElementById('monitorStatus').textContent = '已停止';
+            log('🛑 監控已停止');
+        }
+
+        function updateMetricsDisplay(data) {
+            try {
+                // 更新影片數量
+                const videoCount = data && data.currentTab && data.currentTab.videos 
+                    ? Object.keys(data.currentTab.videos).length 
+                    : 0;
+                document.getElementById('videoCount').textContent = videoCount;
+
+                if (videoCount > 0) {
+                    // 獲取最新的影片數據
+                    const videos = Object.values(data.currentTab.videos);
+                    const latestVideo = videos[videos.length - 1];
+                    const latestMetric = latestVideo.latestMetrics && latestVideo.latestMetrics.length > 0
+                        ? latestVideo.latestMetrics[latestVideo.latestMetrics.length - 1]
+                        : null;
+
+                    if (latestMetric) {
+                        // 更新解析度
+                        const resolution = latestMetric.videoWidth && latestMetric.videoHeight
+                            ? `${latestMetric.videoWidth}x${latestMetric.videoHeight}`
+                            : 'N/A';
+                        document.getElementById('resolution').textContent = resolution;
+
+                        // 更新幀率
+                        const frameRate = latestMetric.frameRate 
+                            ? `${latestMetric.frameRate.toFixed(1)} fps` + (latestMetric.frameRateSource ? ` (${latestMetric.frameRateSource})` : '')
+                            : 'N/A';
+                        document.getElementById('frameRate').textContent = frameRate;
+
+                        // 更新位元率
+                        const bitrate = latestMetric.networkInfo && latestMetric.networkInfo.downlink
+                            ? `${latestMetric.networkInfo.downlink} Mbps`
+                            : 'N/A';
+                        document.getElementById('bitrate').textContent = bitrate;
+
+                        // 更新播放狀態
+                        const playbackState = latestMetric.paused === false ? '播放中' : latestMetric.paused === true ? '暫停' : '未知';
+                        document.getElementById('playbackState').textContent = playbackState;
+
+                        // 更新網路狀態
+                        const networkState = latestMetric.networkState ? `狀態 ${latestMetric.networkState}` : 'N/A';
+                        document.getElementById('networkState').textContent = networkState;
+
+                        log(`📊 指標更新: ${resolution}, ${frameRate}, 播放狀態: ${playbackState}`);
+                    }
+
+                    // 更新緩衝事件
+                    const bufferCount = latestVideo.recentEvents 
+                        ? latestVideo.recentEvents.filter(event => event.type === 'waiting' || event.type === 'stalled').length 
+                        : 0;
+                    document.getElementById('bufferEvents').textContent = bufferCount;
+                } else {
+                    // 沒有影片數據時重置顯示
+                    ['resolution', 'frameRate', 'bitrate', 'playbackState', 'networkState'].forEach(id => {
+                        document.getElementById(id).textContent = 'N/A';
+                    });
+                    document.getElementById('bufferEvents').textContent = '0';
+                }
+            } catch (error) {
+                log('❌ 更新指標顯示時發生錯誤: ' + error.message);
+            }
+        }
+
+        function updateFrequencyDisplay() {
+            const elapsed = (Date.now() - startTime) / 60000; // 分鐘
+            const frequency = elapsed > 0 ? Math.round(updateCount / elapsed) : 0;
+            document.getElementById('updateFreq').textContent = frequency;
+        }
+
+        function openPopup() {
+            log('🔗 嘗試開啟擴充功能 Popup...');
+            if (typeof chrome !== 'undefined' && chrome.action) {
+                chrome.action.openPopup();
+                log('✅ Popup 開啟請求已發送');
+            } else {
+                log('❌ 無法開啟 Popup，請手動點擊擴充功能圖示');
+                alert('請手動點擊瀏覽器工具列中的 CDN Detector 圖示來開啟 Popup');
+            }
+        }
+
+        function openQoEDashboard() {
+            log('📊 嘗試開啟 QoE Dashboard...');
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                const dashboardUrl = chrome.runtime.getURL('qoe-dashboard.html');
+                window.open(dashboardUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+                log('✅ QoE Dashboard 開啟請求已發送');
+            } else {
+                log('❌ 無法開啟 QoE Dashboard，擴充功能未連接');
+                alert('無法開啟 QoE Dashboard，請確保擴充功能已正確安裝並啟用');
+            }
+        }
+
+        function log(message) {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString();
+            logContent.textContent += `[${timestamp}] ${message}\n`;
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logContent').textContent = '日誌已清除...\n';
+            log('🧹 日誌已清除');
+        }
+
+        // 頁面載入時初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🎬 即時影片品質監控測試頁面已載入');
+            checkExtensionConnection();
+            
+            // 自動開始監控
+            setTimeout(() => {
+                startMonitoring();
+            }, 1000);
+        });
+
+        // 頁面卸載時清理
+        window.addEventListener('beforeunload', () => {
+            stopMonitoring();
+        });
+    </script>
+</body>
+</html> 

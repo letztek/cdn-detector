@@ -13,6 +13,14 @@
   "background": {
     "service_worker": "background.js"
   },
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "64": "icon.png",
+    "96": "icon.png",
+    "128": "icon.png"
+  },
   "host_permissions": [
     "<all_urls>"
   ],
@@ -50,7 +58,9 @@
         "*://*.pluralsight.com/*",
         "*://localhost/*",
         "*://127.0.0.1/*",
-        "file:///*"
+        "file:///*",
+        "*://*.cloud.edu.tw/*",
+        "*://*.video.cloud.edu.tw/*"
       ],
       "js": ["video-quality-monitor.js"],
       "run_at": "document_end",
@@ -63,7 +73,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js", "test-content-script.html", "test-content-script.js"],
+      "resources": ["debug-video.html", "internal-test.html", "internal-test.js", "test-video-simple.html", "test-video-simple.js", "test-streaming-platforms.html", "test-streaming-platforms.js", "test-content-script.html", "test-content-script.js", "qoe-dashboard.html", "test-qoe-dashboard.html", "test-realtime-video-quality.html"],
       "matches": ["<all_urls>"]
     }
   ],
@@ -82,4 +92,4 @@
       "https://*.local/*"
     ]
   }
-} 
+}

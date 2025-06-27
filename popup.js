@@ -80,10 +80,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 新增：顯示檢測日誌功能
     displayDetectionLog();
     
-    // 初始化影片品質監控 - 已暫時停用
-    // initializeVideoQuality();
+    // 啟用影片品質監控
+    initializeVideoQuality();
     
-    // 修改：只在必要時自動刷新 - 避免過度頻繁的請求
+    // 設置 QoE Dashboard 按鈕事件監聽器
+    const qoeDashboardBtn = document.getElementById('openQoEDashboard');
+    if (qoeDashboardBtn) {
+      qoeDashboardBtn.addEventListener('click', openQoEDashboard);
+      console.log('QoE Dashboard button event listener added');
+    } else {
+      console.warn('QoE Dashboard button not found');
+    }
+    
+    // 設置自動刷新間隔 - 提高頻率以實現即時顯示
     // 只有在 popup 打開時才刷新，避免持續請求導致通信錯誤
     let refreshInterval = null;
     
@@ -97,11 +106,11 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshInterval = setInterval(() => {
       loadCurrentTabDetection(); // 改為載入當前標籤頁數據
       refreshDetectionLog();
-          // 影片品質數據刷新 - 已暫時停用
-          // if (document.getElementById('videoStatusIndicator')?.classList.contains('active')) {
-          //   refreshVideoQuality();
-          // }
-        }, 5000); // 減少頻率到每5秒刷新一次
+          // 即時更新影片品質數據
+          if (document.getElementById('videoStatusIndicator')?.classList.contains('active')) {
+            refreshVideoQuality();
+          }
+        }, 1000); // 提高到每1秒刷新一次以實現即時顯示
         console.log('Popup visible, started auto-refresh');
       }
     });
@@ -110,11 +119,11 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshInterval = setInterval(() => {
       loadCurrentTabDetection();
       refreshDetectionLog();
-      // 影片品質數據刷新 - 已暫時停用
-      // if (document.getElementById('videoStatusIndicator')?.classList.contains('active')) {
-      //   refreshVideoQuality();
-      // }
-    }, 5000); // 減少頻率到每5秒刷新一次
+      // 即時更新影片品質數據
+      if (document.getElementById('videoStatusIndicator')?.classList.contains('active')) {
+        refreshVideoQuality();
+      }
+    }, 1000); // 提高到每1秒刷新一次以實現即時顯示
     
     console.log('Popup initialization completed');
     
@@ -1026,10 +1035,10 @@ function initializeTabs() {
         targetContent.style.display = 'block';
       }
       
-      // 影片標籤功能已暫時停用
-      // if (targetTab === 'video') {
-      //   refreshVideoQuality();
-      // }
+      // 當切換到影片標籤時，刷新影片品質數據
+      if (targetTab === 'video') {
+        refreshVideoQuality();
+      }
     });
   });
 }
@@ -1042,6 +1051,7 @@ function initializeVideoQuality() {
   // 綁定按鈕事件
   const clearVideoHistoryBtn = document.getElementById('clearVideoHistory');
   const refreshVideoDataBtn = document.getElementById('refreshVideoData');
+  const openQoEDashboardBtn = document.getElementById('openQoEDashboard');
   
   if (clearVideoHistoryBtn) {
     clearVideoHistoryBtn.addEventListener('click', clearVideoHistory);
@@ -1049,6 +1059,10 @@ function initializeVideoQuality() {
   
   if (refreshVideoDataBtn) {
     refreshVideoDataBtn.addEventListener('click', refreshVideoQuality);
+  }
+  
+  if (openQoEDashboardBtn) {
+    openQoEDashboardBtn.addEventListener('click', openQoEDashboard);
   }
   
   // 初始載入影片品質數據（僅在第一次載入時）
@@ -1204,29 +1218,105 @@ function updateVideoStats(videoData) {
   const bufferEvents = document.getElementById('bufferEvents');
   
   if (videoResolution) {
+    const timestamp = new Date().toLocaleTimeString();
     if (latestMetric && latestMetric.videoWidth && latestMetric.videoHeight) {
       videoResolution.textContent = `${latestMetric.videoWidth}x${latestMetric.videoHeight}`;
+      videoResolution.style.color = '#28a745'; // 綠色：有效數據
+      videoResolution.title = `影片解析度 (更新: ${timestamp})`;
     } else {
       videoResolution.textContent = 'N/A';
+      videoResolution.style.color = '#6c757d'; // 灰色：無數據
+      videoResolution.title = '無法取得解析度資訊';
     }
   }
   
   if (videoBitrate) {
-    // 位元率需要從網路狀態或其他來源推算，暫時顯示N/A
-    videoBitrate.textContent = 'N/A';
+    const timestamp = new Date().toLocaleTimeString();
+    
+    // 顯示網路下行速度作為位元率參考
+    if (latestMetric && latestMetric.networkInfo && latestMetric.networkInfo.downlink) {
+      videoBitrate.textContent = `${latestMetric.networkInfo.downlink} Mbps`;
+      videoBitrate.style.color = '#28a745'; // 綠色：網路數據
+      videoBitrate.title = `網路下行速度 (更新: ${timestamp})`;
+    } else if (latestMetric && latestMetric.estimatedBitrate && latestMetric.estimatedBitrate.bufferRatio) {
+      // 如果沒有網路信息，顯示緩衝比例作為參考
+      const bufferPercent = (latestMetric.estimatedBitrate.bufferRatio * 100).toFixed(1);
+      videoBitrate.textContent = `緩衝: ${bufferPercent}%`;
+      videoBitrate.style.color = '#ffc107'; // 黃色：估算數據
+      videoBitrate.title = `緩衝區使用率 (更新: ${timestamp})`;
+    } else {
+      videoBitrate.textContent = 'N/A';
+      videoBitrate.style.color = '#6c757d'; // 灰色：無數據
+      videoBitrate.title = '無法取得位元率資訊';
+    }
   }
   
   if (videoFps) {
-    // 幀率需要從播放品質數據計算，暫時顯示N/A
-    videoFps.textContent = 'N/A';
+    const timestamp = new Date().toLocaleTimeString();
+    
+    // 嘗試從最新指標中獲取幀率信息
+    if (latestMetric && latestMetric.frameRate && latestMetric.frameRate > 0) {
+      let fpsText = `${latestMetric.frameRate.toFixed(1)} fps`;
+      
+      // 顯示計算來源和即時狀態
+      if (latestMetric.frameRateSource) {
+        switch (latestMetric.frameRateSource) {
+          case 'MediaStream API':
+            fpsText += ' (API)';
+            videoFps.style.color = '#28a745'; // 綠色：API數據
+            videoFps.title = `MediaStream API 數據 (更新: ${timestamp})`;
+            break;
+          case 'Calculated (averaged)':
+            const samples = latestMetric.frameRateSamples || 0;
+            fpsText += ` (計算/${samples}樣本)`;
+            videoFps.style.color = samples >= 3 ? '#28a745' : '#ffc107'; // 綠色：足夠樣本，黃色：樣本不足
+            videoFps.title = `真實計算 (${samples}個樣本, 更新: ${timestamp})`;
+            break;
+          case 'Firefox mozFrameDelay':
+            fpsText += ' (Firefox)';
+            videoFps.style.color = '#17a2b8'; // 藍色：Firefox專用
+            videoFps.title = `Firefox API 數據 (更新: ${timestamp})`;
+            break;
+          default:
+            videoFps.style.color = '#6c757d'; // 灰色：其他來源
+            videoFps.title = `未知來源 (更新: ${timestamp})`;
+            break;
+        }
+      } else {
+        videoFps.style.color = '#6c757d';
+        videoFps.title = `幀率數據 (更新: ${timestamp})`;
+      }
+      
+      videoFps.textContent = fpsText;
+    } else if (latestMetric && latestMetric.streamSettings && latestMetric.streamSettings.frameRate) {
+      videoFps.textContent = `${latestMetric.streamSettings.frameRate} fps (設定)`;
+      videoFps.style.color = '#fd7e14'; // 橙色：配置數據
+      videoFps.title = `串流設定值 (更新: ${timestamp})`;
+    } else {
+      videoFps.textContent = 'N/A';
+      videoFps.style.color = '#6c757d'; // 灰色：無數據
+      videoFps.title = '無法計算幀率，需要更多數據點';
+    }
   }
   
   if (bufferEvents) {
+    const timestamp = new Date().toLocaleTimeString();
+    
     // 計算緩衝事件數量
     const bufferCount = videoData.recentEvents 
       ? videoData.recentEvents.filter(event => event.type === 'waiting' || event.type === 'stalled').length 
       : 0;
     bufferEvents.textContent = bufferCount;
+    bufferEvents.title = `緩衝事件統計 (更新: ${timestamp})`;
+    
+    // 根據緩衝事件數量調整顏色
+    if (bufferCount === 0) {
+      bufferEvents.style.color = '#28a745'; // 綠色：無緩衝
+    } else if (bufferCount <= 3) {
+      bufferEvents.style.color = '#ffc107'; // 黃色：少量緩衝
+    } else {
+      bufferEvents.style.color = '#dc3545'; // 紅色：頻繁緩衝
+    }
   }
   
   // 掉幀統計
@@ -1265,7 +1355,6 @@ function updatePlaybackInfo(latestMetric) {
   const currentTime = document.getElementById('currentTime');
   const duration = document.getElementById('duration');
   const playbackState = document.getElementById('playbackState');
-  const volume = document.getElementById('volume');
   
   if (currentTime) {
     currentTime.textContent = formatTime(latestMetric ? latestMetric.currentTime || 0 : 0);
@@ -1287,10 +1376,7 @@ function updatePlaybackInfo(latestMetric) {
     playbackState.textContent = state;
   }
   
-  if (volume) {
-    // 音量資訊可能不在latestMetric中，暫時顯示N/A
-    volume.textContent = 'N/A';
-  }
+  // 移除音量顯示，因為無法穩定獲取
 }
 
 function updateVideoHistory(videos) {
@@ -1377,5 +1463,100 @@ function formatTime(seconds) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   } else {
     return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+}
+
+function openQoEDashboard() {
+  console.log('Opening QoE Performance Dashboard...');
+  
+  // 顯示載入提示
+  const button = document.getElementById('openQoEDashboard');
+  if (button) {
+    const originalText = button.innerHTML;
+    button.innerHTML = '⏳ 正在開啟...';
+    button.disabled = true;
+    
+    // 2秒後恢復按鈕狀態
+    setTimeout(() => {
+      button.innerHTML = originalText;
+      button.disabled = false;
+    }, 2000);
+  }
+  
+  try {
+    // 檢查 QoE Dashboard 是否存在
+    const dashboardUrl = chrome.runtime.getURL('qoe-dashboard.html');
+    console.log('Dashboard URL:', dashboardUrl);
+    
+    // 先測試檔案是否可存取
+    fetch(dashboardUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Dashboard file not accessible: ${response.status}`);
+        }
+        console.log('✅ QoE Dashboard file is accessible');
+        
+        // 嘗試開啟新標籤頁
+        chrome.tabs.create({
+          url: dashboardUrl,
+          active: true
+        }, (tab) => {
+          if (chrome.runtime.lastError) {
+            console.error('❌ Error creating tab:', chrome.runtime.lastError);
+            
+            // 嘗試備用方法：直接在新視窗開啟
+            try {
+              const newWindow = window.open(dashboardUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+              if (newWindow) {
+                console.log('✅ QoE Dashboard opened in new window');
+                window.close();
+              } else {
+                throw new Error('Popup blocked or failed to open');
+              }
+            } catch (fallbackError) {
+              console.error('❌ Fallback method failed:', fallbackError);
+              
+              // 最後備用方案：顯示手動開啟指示
+              const userConfirm = confirm(
+                '無法自動開啟 QoE Dashboard。\n\n' +
+                '您可以手動複製以下網址到新標籤頁：\n' +
+                dashboardUrl + '\n\n' +
+                '點擊「確定」複製網址到剪貼簿'
+              );
+              
+              if (userConfirm) {
+                navigator.clipboard.writeText(dashboardUrl).then(() => {
+                  alert('✅ 網址已複製到剪貼簿！\n請貼到新標籤頁的網址列。');
+                }).catch(() => {
+                  alert('📋 請手動複製此網址：\n' + dashboardUrl);
+                });
+              }
+            }
+          } else {
+            console.log('✅ QoE Dashboard opened successfully in tab:', tab.id);
+            // 關閉 popup
+            window.close();
+          }
+        });
+      })
+      .catch(error => {
+        console.error('❌ QoE Dashboard file check failed:', error);
+        alert(
+          '❌ QoE Dashboard 檔案無法存取\n\n' +
+          '可能原因：\n' +
+          '1. 檔案不存在或損壞\n' +
+          '2. 擴充功能權限不足\n' +
+          '3. 瀏覽器安全限制\n\n' +
+          '請嘗試重新載入擴充功能。'
+        );
+      });
+      
+  } catch (error) {
+    console.error('❌ Critical error in openQoEDashboard:', error);
+    alert(
+      '❌ 開啟 QoE Dashboard 時發生錯誤\n\n' +
+      '錯誤詳情：' + error.message + '\n\n' +
+      '請檢查擴充功能是否正常運作。'
+    );
   }
 }
