@@ -53,18 +53,25 @@
     // 平台檢測
     function detectPlatform() {
         const hostname = window.location.hostname.toLowerCase();
+        const pageTitle = document.title || '';
         
+        // 檢測主要影片平台
         if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
-            return PLATFORMS.YOUTUBE;
+            return `${hostname} (${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''})`;
         } else if (hostname.includes('netflix.com')) {
-            return PLATFORMS.NETFLIX;
+            return `${hostname} (${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''})`;
         } else if (hostname.includes('twitch.tv')) {
-            return PLATFORMS.TWITCH;
+            return `${hostname} (${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''})`;
         } else if (hostname.includes('vimeo.com')) {
-            return PLATFORMS.VIMEO;
+            return `${hostname} (${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''})`;
         }
         
-        return PLATFORMS.HTML5;
+        // 對於其他網站，返回域名和頁面標題的組合
+        if (pageTitle && pageTitle.trim().length > 0) {
+            return `${hostname} (${pageTitle.substring(0, 50)}${pageTitle.length > 50 ? '...' : ''})`;
+        }
+        
+        return hostname || 'html5';
     }
     
     // 生成唯一 ID
