@@ -1048,6 +1048,9 @@ function initializeTabs() {
 // =============================================================================
 
 function initializeVideoQuality() {
+  // 初始化重置時間
+  window.lastVideoQualityResetTime = Date.now();
+  
   // 綁定按鈕事件
   const clearVideoHistoryBtn = document.getElementById('clearVideoHistory');
   const refreshVideoDataBtn = document.getElementById('refreshVideoData');
@@ -1073,6 +1076,7 @@ function initializeVideoQuality() {
 // 添加請求狀態追蹤，防止重複請求
 let isVideoQualityRequesting = false;
 let videoQualityRequestCount = 0;
+let lastVideoQualityRequestTime = 0;
 
 function refreshVideoQuality() {
   // 防止重複請求
@@ -1081,18 +1085,31 @@ function refreshVideoQuality() {
     return;
   }
   
+  // 檢查請求間隔，至少間隔 2 秒
+  const currentTime = Date.now();
+  if (currentTime - lastVideoQualityRequestTime < 2000) {
+    console.log('Video quality request too frequent, skipping...');
+    return;
+  }
+  
+  lastVideoQualityRequestTime = currentTime;
+  
+  // 重置計數器（每 30 秒重置一次）
+  if (currentTime - window.lastVideoQualityResetTime > 30000) {
+    videoQualityRequestCount = 0;
+    window.lastVideoQualityResetTime = currentTime;
+  }
+  
   // 檢查請求頻率，避免過度請求
   videoQualityRequestCount++;
-  if (videoQualityRequestCount > 10) {
-    console.warn('Too many video quality requests, throttling...');
-    setTimeout(() => {
-      videoQualityRequestCount = Math.max(0, videoQualityRequestCount - 5);
-    }, 10000);
+  if (videoQualityRequestCount > 15) {
+    console.warn('Too many video quality requests in 30 seconds, throttling...');
+    // 不再增加計數，等待下次重置
     return;
   }
   
   isVideoQualityRequesting = true;
-  console.log('Requesting video quality data...');
+  console.log(`Requesting video quality data... (request #${videoQualityRequestCount})`);
   
   try {
     // 首先檢查 Chrome runtime 是否可用
@@ -1233,16 +1250,45 @@ function updateVideoStats(videoData) {
   if (videoBitrate) {
     const timestamp = new Date().toLocaleTimeString();
     
-    // 顯示網路下行速度作為位元率參考
-    if (latestMetric && latestMetric.networkInfo && latestMetric.networkInfo.downlink) {
-      videoBitrate.textContent = `${latestMetric.networkInfo.downlink} Mbps`;
-      videoBitrate.style.color = '#28a745'; // 綠色：網路數據
-      videoBitrate.title = `網路下行速度 (更新: ${timestamp})`;
+    // 優先顯示真實的影片位元率（從 manifest 或 stream 數據獲取）
+    let actualBitrate = null;
+    let bitrateSource = null;
+    
+    // 檢查是否有真實的影片位元率數據
+    if (latestMetric && latestMetric.streamSettings && latestMetric.streamSettings.bitrate) {
+      actualBitrate = latestMetric.streamSettings.bitrate * 1000; // 轉換為 bps
+      bitrateSource = 'stream';
+    } else if (latestMetric && latestMetric.videoWidth && latestMetric.videoHeight && latestMetric.currentTime > 0) {
+      // 根據解析度估算位元率（僅在影片正在播放時）
+      const pixels = latestMetric.videoWidth * latestMetric.videoHeight;
+      if (pixels >= 1920 * 1080) {
+        actualBitrate = 5000000; // 1080p: ~5 Mbps
+      } else if (pixels >= 1280 * 720) {
+        actualBitrate = 3000000; // 720p: ~3 Mbps
+      } else if (pixels >= 854 * 480) {
+        actualBitrate = 1500000; // 480p: ~1.5 Mbps
+      } else {
+        actualBitrate = 800000; // 360p or lower: ~0.8 Mbps
+      }
+      bitrateSource = 'estimated';
+    }
+    
+    if (actualBitrate) {
+      const formattedBitrate = formatBitrate(actualBitrate);
+      videoBitrate.textContent = formattedBitrate;
+      
+      if (bitrateSource === 'stream') {
+        videoBitrate.style.color = '#28a745'; // 綠色：真實數據
+        videoBitrate.title = `串流位元率 (更新: ${timestamp})`;
+      } else {
+        videoBitrate.style.color = '#ffc107'; // 黃色：估算數據
+        videoBitrate.title = `估算位元率 (基於解析度, 更新: ${timestamp})`;
+      }
     } else if (latestMetric && latestMetric.estimatedBitrate && latestMetric.estimatedBitrate.bufferRatio) {
-      // 如果沒有網路信息，顯示緩衝比例作為參考
+      // 如果沒有位元率數據，顯示緩衝比例作為參考
       const bufferPercent = (latestMetric.estimatedBitrate.bufferRatio * 100).toFixed(1);
       videoBitrate.textContent = `緩衝: ${bufferPercent}%`;
-      videoBitrate.style.color = '#ffc107'; // 黃色：估算數據
+      videoBitrate.style.color = '#17a2b8'; // 藍色：緩衝數據
       videoBitrate.title = `緩衝區使用率 (更新: ${timestamp})`;
     } else {
       videoBitrate.textContent = 'N/A';
