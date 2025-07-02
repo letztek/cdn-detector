@@ -558,14 +558,14 @@
             const delayedVideos = document.querySelectorAll('video');
             let newValidVideos = 0;
             
-            delayedVideos.forEach(video => {
+                delayedVideos.forEach(video => {
                 if (isValidVideoElement(video) && !foundElements.has(video)) {
-                    foundElements.add(video);
-                    videos.push(video);
-                    monitorVideoElement(video);
+                        foundElements.add(video);
+                        videos.push(video);
+                        monitorVideoElement(video);
                     newValidVideos++;
-                }
-            });
+                    }
+                });
             
             if (newValidVideos > 0) {
                 log(`Found ${newValidVideos} additional valid videos after delay`, 'info');

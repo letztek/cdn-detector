@@ -113,6 +113,93 @@ async function fetchManifestContent(url) {
   }
 }
 
+// Task 23: DRM 系統解析函數
+function parseDRMSystem(contentProtectionMatch, fullManifestText, index) {
+  try {
+    // DRM 系統 UUID 對應表
+    const DRM_SYSTEMS = {
+      'edef8ba9-79d6-4ace-a3c8-27dcd51d21ed': 'Widevine',
+      '9a04f079-9840-4286-ab92-e65be0885f95': 'PlayReady', 
+      '94ce86fb-07ff-4f43-adb8-93d2fa968ca2': 'FairPlay',
+      '1077efec-c0b2-4d02-ace3-3c1e52e2fb4b': 'ClearKey',
+      '5e629af5-38da-4063-8977-97ffbd9902d4': 'Marlin',
+      'adb41c24-2dbf-4a6d-958b-4457c0d27b95': 'Nagra',
+      '80a6be7e-1448-4c37-9e70-d5aebe04c8d2': 'Irdeto',
+      '644fe7b5-1f12-4f58-b05c-4c61c9410a0a': 'VCAS',
+      '29701fe4-3cc7-4a34-8c5b-ae90c7439a47': 'Verimatrix',
+      '35bf197b-530e-42d7-8b65-1b4bf415070f': 'DivX',
+      'b4413586-c58c-ffb0-94a5-d4896c1af6c3': 'Adobe Primetime',
+      'f239e769-efa3-4850-9c16-a903c6932efb': 'Adobe Access'
+    };
+    
+    const result = {
+      system: 'Unknown',
+      details: {}
+    };
+    
+    // 提取 schemeIdUri
+    const schemeMatch = contentProtectionMatch.match(/schemeIdUri="([^"]*)"/i);
+    if (schemeMatch) {
+      const schemeUri = schemeMatch[1];
+      result.details.schemeIdUri = schemeUri;
+      
+      // 檢查是否為 UUID 格式的 DRM 系統
+      const uuidMatch = schemeUri.match(/urn:uuid:([a-f0-9-]+)/i);
+      if (uuidMatch) {
+        const uuid = uuidMatch[1].toLowerCase();
+        result.system = DRM_SYSTEMS[uuid] || `Unknown UUID (${uuid})`;
+        result.details.uuid = uuid;
+      }
+      // 檢查其他已知的 scheme
+      else if (schemeUri.includes('mp4protection')) {
+        result.system = 'CENC (Common Encryption)';
+      }
+      else if (schemeUri.includes('clearkey')) {
+        result.system = 'ClearKey';
+      }
+    }
+    
+    // 提取 value 屬性
+    const valueMatch = contentProtectionMatch.match(/value="([^"]*)"/i);
+    if (valueMatch) {
+      result.details.value = valueMatch[1];
+    }
+    
+    // 提取 default_KID
+    const kidMatch = contentProtectionMatch.match(/cenc:default_KID="([^"]*)"/i);
+    if (kidMatch) {
+      result.details.defaultKID = kidMatch[1];
+    }
+    
+    // 檢查是否有 PSSH 數據
+    const psshRegex = new RegExp(`<cenc:pssh[^>]*>([^<]*)</cenc:pssh>`, 'gi');
+    const psshMatches = fullManifestText.match(psshRegex);
+    if (psshMatches && psshMatches.length > index) {
+      const psshMatch = psshMatches[index].match(/>([^<]*)</);
+      if (psshMatch) {
+        result.details.pssh = psshMatch[1].trim();
+        result.details.hasPSSH = true;
+      }
+    }
+    
+    // 檢查 PlayReady 特定數據
+    if (result.system === 'PlayReady') {
+      const playreadyRegex = /<mspr:pro[^>]*>([^<]*)<\/mspr:pro>/gi;
+      const playreadyMatch = fullManifestText.match(playreadyRegex);
+      if (playreadyMatch && playreadyMatch.length > 0) {
+        result.details.playreadyHeader = playreadyMatch[0];
+        result.details.hasPlayReadyHeader = true;
+      }
+    }
+    
+    return result;
+    
+  } catch (error) {
+    logMessage(`Error parsing DRM system: ${error.message}`, 'error');
+    return null;
+  }
+}
+
 function parseDashManifest(manifestText, baseUrl) {
   try {
     logMessage('Starting DASH manifest parsing with regex-based parser', 'debug');
@@ -128,13 +215,26 @@ function parseDashManifest(manifestText, baseUrl) {
       parseTime: Date.now()
     };
     
-    // 檢查 DRM 保護 - 使用正則表達式
+    // Task 23: 增強 DRM 保護檢測 - 使用正則表達式
     const contentProtectionRegex = /<ContentProtection[^>]*>/gi;
     const contentProtectionMatches = manifestText.match(contentProtectionRegex);
     manifestData.drmProtection = contentProtectionMatches && contentProtectionMatches.length > 0;
+    manifestData.drmSystems = [];
+    manifestData.drmDetails = {};
     
     if (manifestData.drmProtection) {
       logMessage(`🔒 DRM Protection detected: ${contentProtectionMatches.length} ContentProtection elements`, 'info');
+      
+      // 解析 DRM 系統類型
+      contentProtectionMatches.forEach((match, index) => {
+        const drmInfo = parseDRMSystem(match, manifestText, index);
+        if (drmInfo) {
+          manifestData.drmSystems.push(drmInfo.system);
+          manifestData.drmDetails[drmInfo.system] = drmInfo.details;
+        }
+      });
+      
+      logMessage(`🔐 DRM Systems detected: ${manifestData.drmSystems.join(', ')}`, 'info');
     }
     
     // 解析 Representation 元素 - 使用正則表達式
@@ -208,6 +308,78 @@ function parseDashManifest(manifestText, baseUrl) {
   }
 }
 
+// Task 23: HLS DRM Key 解析函數
+function parseHLSDRMKey(keyLine) {
+  try {
+    const result = {
+      system: 'Unknown',
+      details: {}
+    };
+    
+    // 解析 METHOD
+    const methodMatch = keyLine.match(/METHOD=([^,\s]+)/i);
+    if (methodMatch) {
+      const method = methodMatch[1];
+      result.details.method = method;
+      
+      // 根據 method 判斷 DRM 系統
+      switch (method.toUpperCase()) {
+        case 'AES-128':
+          result.system = 'AES-128 (Clear Key)';
+          break;
+        case 'SAMPLE-AES':
+          result.system = 'Sample-AES';
+          break;
+        case 'SAMPLE-AES-CTR':
+          result.system = 'Sample-AES-CTR';
+          break;
+        default:
+          result.system = `HLS Encryption (${method})`;
+      }
+    }
+    
+    // 解析 URI
+    const uriMatch = keyLine.match(/URI="([^"]+)"/i);
+    if (uriMatch) {
+      result.details.keyUri = uriMatch[1];
+    }
+    
+    // 解析 IV
+    const ivMatch = keyLine.match(/IV=0x([A-Fa-f0-9]+)/i);
+    if (ivMatch) {
+      result.details.iv = ivMatch[1];
+    }
+    
+    // 解析 KEYFORMAT (用於識別 DRM 系統)
+    const keyformatMatch = keyLine.match(/KEYFORMAT="([^"]+)"/i);
+    if (keyformatMatch) {
+      const keyformat = keyformatMatch[1];
+      result.details.keyformat = keyformat;
+      
+      // 根據 keyformat 識別特定的 DRM 系統
+      if (keyformat.includes('widevine')) {
+        result.system = 'Widevine (HLS)';
+      } else if (keyformat.includes('playready')) {
+        result.system = 'PlayReady (HLS)';
+      } else if (keyformat.includes('fairplay')) {
+        result.system = 'FairPlay (HLS)';
+      }
+    }
+    
+    // 解析 KEYFORMATVERSIONS
+    const keyformatVersionsMatch = keyLine.match(/KEYFORMATVERSIONS="([^"]+)"/i);
+    if (keyformatVersionsMatch) {
+      result.details.keyformatVersions = keyformatVersionsMatch[1];
+    }
+    
+    return result;
+    
+  } catch (error) {
+    logMessage(`Error parsing HLS DRM key: ${error.message}`, 'error');
+    return null;
+  }
+}
+
 function parseHlsManifest(manifestText, baseUrl) {
   try {
     const lines = manifestText.split('\n').map(line => line.trim()).filter(line => line);
@@ -267,9 +439,22 @@ function parseHlsManifest(manifestText, baseUrl) {
         currentStream = null;
       }
       
-      // 檢查 DRM 保護
+      // Task 23: 檢查 HLS DRM 保護
       if (line.startsWith('#EXT-X-KEY:')) {
         manifestData.drmProtection = true;
+        
+        // 初始化 DRM 系統陣列（如果尚未初始化）
+        if (!manifestData.drmSystems) {
+          manifestData.drmSystems = [];
+          manifestData.drmDetails = {};
+        }
+        
+        // 解析 HLS DRM 資訊
+        const hlsDrmInfo = parseHLSDRMKey(line);
+        if (hlsDrmInfo && !manifestData.drmSystems.includes(hlsDrmInfo.system)) {
+          manifestData.drmSystems.push(hlsDrmInfo.system);
+          manifestData.drmDetails[hlsDrmInfo.system] = hlsDrmInfo.details;
+        }
       }
       
       // 檢查媒體片段（如果是媒體播放列表）
@@ -377,7 +562,85 @@ async function processManifestFile(url, tabId) {
   }
 }
 
-// 新增：Media Segment 處理函數 (Task 22.2)
+// Task 23: 增強媒體段 DRM 偵測功能
+function detectSegmentDRM(url, responseHeaders) {
+  try {
+    const drmInfo = {
+      protected: false,
+      systems: [],
+      details: {}
+    };
+    
+    // 檢查 HTTP 標頭中的 DRM 相關資訊
+    if (responseHeaders) {
+      responseHeaders.forEach(header => {
+        const headerName = header.name.toLowerCase();
+        const headerValue = header.value;
+        
+        // 檢查常見的 DRM 相關標頭
+        if (headerName === 'content-protection' || 
+            headerName === 'x-content-protection' ||
+            headerName === 'drm-system') {
+          drmInfo.protected = true;
+          drmInfo.details.headers = drmInfo.details.headers || {};
+          drmInfo.details.headers[headerName] = headerValue;
+        }
+        
+        // 檢查 Content-Type 中的加密指示
+        if (headerName === 'content-type' && headerValue.includes('encrypted')) {
+          drmInfo.protected = true;
+          drmInfo.details.encryptedContentType = headerValue;
+        }
+        
+        // 檢查 Widevine 相關標頭
+        if (headerName.includes('widevine') || headerValue.includes('widevine')) {
+          drmInfo.protected = true;
+          drmInfo.systems.push('Widevine');
+          drmInfo.details.widevine = headerValue;
+        }
+        
+        // 檢查 PlayReady 相關標頭
+        if (headerName.includes('playready') || headerValue.includes('playready')) {
+          drmInfo.protected = true;
+          drmInfo.systems.push('PlayReady');
+          drmInfo.details.playready = headerValue;
+        }
+      });
+    }
+    
+    // 基於 URL 模式的 DRM 偵測
+    const urlLower = url.toLowerCase();
+    if (urlLower.includes('drm') || 
+        urlLower.includes('encrypted') || 
+        urlLower.includes('protected')) {
+      drmInfo.protected = true;
+      drmInfo.details.urlPattern = 'DRM pattern detected in URL';
+    }
+    
+    // 檢查 m4s 檔案的特定 DRM 模式
+    if (url.endsWith('.m4s')) {
+      // DASH 加密段通常包含特定的路徑模式
+      if (urlLower.includes('enc') || 
+          urlLower.includes('cenc') ||
+          urlLower.includes('cbcs')) {
+        drmInfo.protected = true;
+        drmInfo.systems.push('CENC');
+        drmInfo.details.encryptionScheme = 'Common Encryption';
+      }
+    }
+    
+    // 去重 DRM 系統
+    drmInfo.systems = [...new Set(drmInfo.systems)];
+    
+    return drmInfo;
+    
+  } catch (error) {
+    logMessage(`Error detecting segment DRM: ${error.message}`, 'error');
+    return { protected: false, systems: [], details: {} };
+  }
+}
+
+// 新增：Media Segment 處理函數 (Task 22.2 + Task 23 DRM 增強)
 function processMediaSegment(details) {
   try {
     const { url, tabId, requestId, fromCache, responseHeaders, statusCode } = details;
@@ -385,6 +648,12 @@ function processMediaSegment(details) {
     const timestamp = Date.now();
     
     logMessage(`📺 Media segment detected: ${url.substring(0, 100)}... [${segmentType}] (Tab: ${tabId})`, 'info');
+    
+    // Task 23: 檢測媒體段的 DRM 保護
+    const segmentDRM = detectSegmentDRM(url, responseHeaders);
+    if (segmentDRM.protected) {
+      logMessage(`🔒 DRM protected segment detected: ${segmentDRM.systems.join(', ')}`, 'info');
+    }
     
     // 初始化標籤頁的媒體片段資料
     if (!mediaSegmentMap[tabId]) {
@@ -400,7 +669,13 @@ function processMediaSegment(details) {
           hlsSegments: 0,
           failedSegments: 0,
           cachedSegments: 0,
+          drmProtectedSegments: 0, // Task 23: 新增 DRM 保護段計數
           lastUpdated: timestamp
+        },
+        drmInfo: { // Task 23: 新增 DRM 資訊追蹤
+          hasProtectedSegments: false,
+          detectedSystems: [],
+          protectionDetails: {}
         }
       };
     }
@@ -426,6 +701,9 @@ function processMediaSegment(details) {
     const segmentData = {
       url: url,
       segmentType: segmentType,
+      drmProtected: segmentDRM.protected, // Task 23: 新增 DRM 保護狀態
+      drmSystems: segmentDRM.systems,     // Task 23: 新增 DRM 系統資訊
+      drmDetails: segmentDRM.details,     // Task 23: 新增 DRM 詳細資訊
       timestamp: timestamp,
       requestId: requestId,
       contentLength: contentLength,
@@ -460,6 +738,7 @@ function processMediaSegment(details) {
 
 function updateMediaSegmentStats(tabId, segmentData) {
   const stats = mediaSegmentMap[tabId].stats;
+  const drmInfo = mediaSegmentMap[tabId].drmInfo;
   
   stats.totalSegments++;
   stats.totalBytes += segmentData.contentLength || 0;
@@ -485,6 +764,23 @@ function updateMediaSegmentStats(tabId, segmentData) {
   
   if (segmentData.fromCache) {
     stats.cachedSegments++;
+  }
+  
+  // Task 23: 更新 DRM 相關統計
+  if (segmentData.drmProtected) {
+    stats.drmProtectedSegments++;
+    drmInfo.hasProtectedSegments = true;
+    
+    // 更新偵測到的 DRM 系統列表
+    segmentData.drmSystems.forEach(system => {
+      if (!drmInfo.detectedSystems.includes(system)) {
+        drmInfo.detectedSystems.push(system);
+        logMessage(`🔐 New DRM system detected in segments: ${system}`, 'info');
+      }
+    });
+    
+    // 更新保護詳細資訊
+    Object.assign(drmInfo.protectionDetails, segmentData.drmDetails);
   }
 }
 
@@ -1569,7 +1865,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.storage.local.remove(['debugLogs'], () => {
         logMessage('Debug logs cleared');
       });
-      });
+    });
       sendResponse({ success: true });
       return;
     }
@@ -2638,8 +2934,8 @@ class QoEMetricCalculator {
     }
   }
 
-  // 3. DRM 保護狀態指標
-  calculateDRMProtection(manifestData, videoData) {
+  // 3. DRM 保護狀態指標 (Task 23 增強版)
+  calculateDRMProtection(manifestData, videoData, segmentData) {
     try {
       const metric = {
         type: QOE_METRICS.DRM_PROTECTION,
@@ -2647,7 +2943,14 @@ class QoEMetricCalculator {
         protected: false,
         drmSystems: [],
         score: 100, // 預設為 100，DRM 不影響品質分數
-        details: {}
+        details: {
+          manifestDRM: false,
+          segmentDRM: false,
+          drmSystemDetails: {},
+          protectedSegmentRatio: 0,
+          totalSegments: 0,
+          protectedSegments: 0
+        }
       };
 
       // 檢查 manifest 中的 DRM 資訊
@@ -2655,11 +2958,64 @@ class QoEMetricCalculator {
         Object.values(manifestData).forEach(manifest => {
           if (manifest.drmProtection) {
             metric.protected = true;
+            metric.details.manifestDRM = true;
+            
             if (manifest.drmSystems) {
               metric.drmSystems = [...new Set([...metric.drmSystems, ...manifest.drmSystems])];
+              
+              // 收集 DRM 系統詳細資訊
+              if (manifest.drmDetails) {
+                Object.assign(metric.details.drmSystemDetails, manifest.drmDetails);
+              }
             }
           }
         });
+      }
+
+      // Task 23: 檢查媒體段中的 DRM 資訊
+      if (segmentData) {
+        Object.values(segmentData).forEach(segmentInfo => {
+          if (segmentInfo.drmInfo && segmentInfo.drmInfo.hasProtectedSegments) {
+            metric.protected = true;
+            metric.details.segmentDRM = true;
+            
+            // 合併媒體段偵測到的 DRM 系統
+            if (segmentInfo.drmInfo.detectedSystems) {
+              metric.drmSystems = [...new Set([...metric.drmSystems, ...segmentInfo.drmInfo.detectedSystems])];
+            }
+            
+            // 收集媒體段保護詳細資訊
+            if (segmentInfo.drmInfo.protectionDetails) {
+              Object.assign(metric.details.drmSystemDetails, segmentInfo.drmInfo.protectionDetails);
+            }
+          }
+          
+          // 統計保護段比例
+          if (segmentInfo.stats) {
+            metric.details.totalSegments += segmentInfo.stats.totalSegments || 0;
+            metric.details.protectedSegments += segmentInfo.stats.drmProtectedSegments || 0;
+          }
+        });
+        
+        // 計算保護段比例
+        if (metric.details.totalSegments > 0) {
+          metric.details.protectedSegmentRatio = 
+            metric.details.protectedSegments / metric.details.totalSegments;
+        }
+      }
+
+      // 去重 DRM 系統
+      metric.drmSystems = [...new Set(metric.drmSystems)];
+      
+      // 記錄詳細的 DRM 偵測結果
+      if (metric.protected) {
+        logMessage(`🔒 DRM Protection Summary:`, 'info');
+        logMessage(`  - Systems: ${metric.drmSystems.join(', ')}`, 'info');
+        logMessage(`  - Manifest DRM: ${metric.details.manifestDRM}`, 'info');
+        logMessage(`  - Segment DRM: ${metric.details.segmentDRM}`, 'info');
+        if (metric.details.totalSegments > 0) {
+          logMessage(`  - Protected segments: ${metric.details.protectedSegments}/${metric.details.totalSegments} (${Math.round(metric.details.protectedSegmentRatio * 100)}%)`, 'info');
+        }
       }
 
       return metric;
@@ -2724,7 +3080,7 @@ class QoEMetricCalculator {
       const metrics = [
         this.calculateStreamDetection(videoData, manifestData, segmentData),
         this.calculateResolution(videoData, manifestData),
-        this.calculateDRMProtection(manifestData, videoData),
+        this.calculateDRMProtection(manifestData, videoData, segmentData), // Task 23: 傳遞媒體段資料
         this.calculateStartupTime(videoData, eventHistory)
       ].filter(metric => metric !== null);
 

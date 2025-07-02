@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DRM 偵測快速測試</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .test-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .info { color: #2196F3; }
+        .warning { color: #ff9800; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 DRM 偵測快速測試</h1>
+        
+        <div class="test-section">
+            <h2>測試 1: 檢查擴充功能狀態</h2>
+            <button class="test-button" onclick="checkExtension()">檢查擴充功能</button>
+            <button class="test-button" onclick="sendPing()">發送 PING</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>測試 2: 模擬 DRM 視頻</h2>
+            <button class="test-button" onclick="createDRMVideo()">創建 DRM 測試視頻</button>
+            <button class="test-button" onclick="checkVideoQuality()">檢查視頻品質數據</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>測試 3: 檢查 Popup 顯示</h2>
+            <p>請點擊擴充功能圖示，切換到「影片品質」標籤頁，查看 DRM 資訊是否顯示。</p>
+            <button class="test-button" onclick="showInstructions()">顯示檢查步驟</button>
+        </div>
+        
+        <div id="results"></div>
+        
+        <!-- 隱藏的視頻元素用於測試 -->
+        <video id="testVideo" style="display: none;"></video>
+    </div>
+    
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type;
+            resultsDiv.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+        
+        function checkExtension() {
+            log('檢查擴充功能狀態...', 'info');
+            
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                log('✅ Chrome 擴充功能 API 可用', 'success');
+                log(`擴充功能 ID: ${chrome.runtime.id}`, 'info');
+                
+                // 嘗試發送訊息到 background script
+                chrome.runtime.sendMessage({ type: 'GET_STATUS' }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        log(`❌ 無法連接到 background script: ${chrome.runtime.lastError.message}`, 'error');
+                    } else {
+                        log('✅ 成功連接到 background script', 'success');
+                        if (response) {
+                            log(`回應: ${JSON.stringify(response, null, 2)}`, 'info');
+                        }
+                    }
+                });
+            } else {
+                log('❌ Chrome 擴充功能 API 不可用', 'error');
+                log('請確保此頁面是從擴充功能中開啟的', 'warning');
+            }
+        }
+        
+        function sendPing() {
+            log('發送 PING 到視頻品質系統...', 'info');
+            
+            chrome.runtime.sendMessage({ type: 'PING_VIDEO_QUALITY' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    log(`❌ PING 失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    log('✅ PING 成功', 'success');
+                    log(`回應: ${JSON.stringify(response, null, 2)}`, 'info');
+                }
+            });
+        }
+        
+        function createDRMVideo() {
+            log('創建模擬 DRM 視頻...', 'info');
+            
+            const video = document.getElementById('testVideo');
+            
+            // 設置視頻屬性
+            video.width = 1920;
+            video.height = 1080;
+            
+            // 模擬 MPD URL
+            video.src = 'https://example.com/test.mpd';
+            
+            // 模擬 MediaKeys
+            try {
+                // 創建假的 mediaKeys 物件
+                video.mediaKeys = {
+                    keySystem: 'com.widevine.alpha'
+                };
+                
+                log('✅ 已設置模擬 MediaKeys', 'success');
+                log(`Key System: ${video.mediaKeys.keySystem}`, 'info');
+                
+                // 觸發 encrypted 事件
+                const encryptedEvent = new Event('encrypted');
+                encryptedEvent.initDataType = 'cenc';
+                video.dispatchEvent(encryptedEvent);
+                
+                log('✅ 已觸發 encrypted 事件', 'success');
+                
+                // 等待一下讓 content script 偵測到視頻
+                setTimeout(() => {
+                    log('檢查 content script 是否偵測到視頻...', 'info');
+                    checkVideoQuality();
+                }, 1000);
+                
+            } catch (error) {
+                log(`❌ 創建 DRM 視頻失敗: ${error.message}`, 'error');
+            }
+        }
+        
+        function checkVideoQuality() {
+            log('檢查視頻品質數據...', 'info');
+            
+            chrome.runtime.sendMessage({ type: 'GET_VIDEO_QUALITY_DATA' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    log(`❌ 獲取視頻品質數據失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    log('✅ 成功獲取視頻品質數據', 'success');
+                    
+                    if (response && response.data) {
+                        const data = response.data;
+                        
+                        if (data.currentTab && data.currentTab.videos) {
+                            const videoCount = Object.keys(data.currentTab.videos).length;
+                            log(`找到 ${videoCount} 個視頻`, 'info');
+                            
+                            // 檢查每個視頻的 DRM 資訊
+                            Object.values(data.currentTab.videos).forEach((video, index) => {
+                                log(`\n視頻 ${index + 1}:`, 'info');
+                                
+                                if (video.latestMetrics && video.latestMetrics.length > 0) {
+                                    const latestMetric = video.latestMetrics[video.latestMetrics.length - 1];
+                                    
+                                    if (latestMetric.drmProtection) {
+                                        log('✅ 找到 DRM 資訊:', 'success');
+                                        log(JSON.stringify(latestMetric.drmProtection, null, 2), 'info');
+                                    } else {
+                                        log('❌ 沒有 DRM 資訊', 'warning');
+                                    }
+                                    
+                                    // 顯示其他指標
+                                    log(`解析度: ${latestMetric.videoWidth}x${latestMetric.videoHeight}`, 'info');
+                                    log(`來源: ${latestMetric.src || 'N/A'}`, 'info');
+                                } else {
+                                    log('沒有指標數據', 'warning');
+                                }
+                            });
+                        } else {
+                            log('沒有找到視頻數據', 'warning');
+                        }
+                    } else {
+                        log('回應中沒有數據', 'warning');
+                    }
+                }
+            });
+        }
+        
+        function showInstructions() {
+            log('\n=== 檢查 Popup DRM 顯示步驟 ===', 'info');
+            log('1. 點擊瀏覽器工具列的 CDN Detector 圖示', 'info');
+            log('2. 在 popup 視窗中，點擊「影片品質」標籤', 'info');
+            log('3. 如果有 DRM 保護的影片，應該會看到：', 'info');
+            log('   - 🔒 DRM 保護資訊 區域', 'info');
+            log('   - 保護狀態: 已加密 (紅色)', 'info');
+            log('   - DRM 系統: Widevine, PlayReady 等', 'info');
+            log('   - 串流類型: MPEG-DASH (MPD)', 'info');
+            log('\n如果沒有看到 DRM 資訊，請：', 'warning');
+            log('1. 確保正在播放 DRM 保護的影片', 'warning');
+            log('2. 重新載入擴充功能', 'warning');
+            log('3. 重新整理頁面', 'warning');
+        }
+        
+        // 頁面載入時自動檢查
+        window.addEventListener('load', () => {
+            log('DRM 偵測快速測試頁面已載入', 'success');
+            log('請點擊上方按鈕開始測試\n', 'info');
+        });
+    </script>
+</body>
+</html> 

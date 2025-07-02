@@ -1370,6 +1370,9 @@ function updateVideoStats(videoData) {
   
   // 播放資訊
   updatePlaybackInfo(latestMetric);
+  
+  // DRM 保護資訊
+  updateDRMInfo(latestMetric);
 }
 
 function updateFrameStats(latestMetric) {
@@ -1604,5 +1607,74 @@ function openQoEDashboard() {
       '錯誤詳情：' + error.message + '\n\n' +
       '請檢查擴充功能是否正常運作。'
     );
+  }
+}
+
+function updateDRMInfo(latestMetric) {
+  const drmInfo = document.getElementById('drmInfo');
+  const drmStatus = document.getElementById('drmStatus');
+  const drmSystems = document.getElementById('drmSystems');
+  const keySystem = document.getElementById('keySystem');
+  const keySystemItem = document.getElementById('keySystemItem');
+  const streamType = document.getElementById('streamType');
+  const mpdStreamItem = document.getElementById('mpdStreamItem');
+  
+  // 檢查是否有 DRM 資訊
+  const hasDRM = latestMetric && latestMetric.drmProtection;
+  
+  if (!hasDRM || !latestMetric.drmProtection.isProtected) {
+    // 沒有 DRM 保護
+    if (drmInfo) drmInfo.style.display = 'none';
+    return;
+  }
+  
+  // 顯示 DRM 區域
+  if (drmInfo) drmInfo.style.display = 'block';
+  
+  const drmData = latestMetric.drmProtection;
+  
+  // 更新 DRM 狀態
+  if (drmStatus) {
+    if (drmData.isProtected) {
+      drmStatus.textContent = '已加密';
+      drmStatus.style.color = '#dc3545'; // 紅色表示加密
+    } else {
+      drmStatus.textContent = '未加密';
+      drmStatus.style.color = '#28a745'; // 綠色表示未加密
+    }
+  }
+  
+  // 更新 DRM 系統列表
+  if (drmSystems) {
+    if (drmData.systems && drmData.systems.length > 0) {
+      drmSystems.textContent = drmData.systems.join(', ');
+      drmSystems.style.color = '#17a2b8';
+    } else {
+      drmSystems.textContent = '未知';
+      drmSystems.style.color = '#6c757d';
+    }
+  }
+  
+  // 更新金鑰系統
+  if (keySystem && keySystemItem) {
+    if (drmData.keySystem) {
+      keySystemItem.style.display = 'block';
+      keySystem.textContent = drmData.keySystem;
+      keySystem.style.color = '#ffc107';
+    } else {
+      keySystemItem.style.display = 'none';
+    }
+  }
+  
+  // 更新串流類型
+  if (streamType && mpdStreamItem) {
+    if (drmData.mpdInfo && drmData.mpdInfo.detected) {
+      mpdStreamItem.style.display = 'block';
+      streamType.textContent = 'MPEG-DASH (MPD)';
+      streamType.style.color = '#28a745';
+      streamType.title = drmData.mpdInfo.url || 'MPD 串流';
+    } else {
+      mpdStreamItem.style.display = 'none';
+    }
   }
 }

@@ -21,6 +21,9 @@ CDN Detector 是一個 Google Chrome 擴充功能，專門用於檢測當前網�
 - 📊 **QoE Dashboard**：專業的影片品質體驗監控儀表板
 - 🎥 **串流分析**：DASH/HLS 串流格式檢測與分析
 - 📈 **即時指標**：幀率、位元率、緩衝率、解析度等關鍵指標
+- 🔒 **DRM 保護檢測**：全面檢測數位版權管理（DRM）系統，支援 Widevine、PlayReady、FairPlay、ClearKey
+- 🛡️ **多層 DRM 檢測**：MediaKeys API、加密事件監聽、EME 支援測試、MPD URL 檢測等多重檢測機制
+- 🎯 **平台特定檢測**：針對 Netflix、GagaOOLala、Disney+ 等平台的專門 DRM 檢測優化
 
 ## 安裝步驟
 1. 下載專案檔案到本地
@@ -148,6 +151,9 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - **多層 FPS 檢測**：MediaStream API、計算方法等多重檢測機制
 - **即時視覺化**：彩色狀態指示器，直觀呈現數據品質
 - **跨平台相容**：支援多種影音串流平台的統一監控
+- **DRM 檢測**：全面檢測數位版權管理（DRM）系統，支援 Widevine、PlayReady、FairPlay、ClearKey
+- **多層 DRM 檢測**：MediaKeys API、加密事件監聽、EME 支援測試、MPD URL 檢測等多重檢測機制
+- **平台特定檢測**：針對 Netflix、GagaOOLala、Disney+ 等平台的專門 DRM 檢測優化
 
 ## 故障排除
 
@@ -192,11 +198,21 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - **host_permissions**：存取所有網站的請求資料
 
 ## 版本資訊
-- **版本**：2.2.1
+- **版本**：2.3.0
 - **Manifest 版本**：V3
 - **相容性**：Chrome 88+
 
 ### 更新歷史
+**v2.3.0** (2024-12-23)
+- 🔒 **DRM 檢測功能**：全新實現數位版權管理（DRM）系統檢測
+- 🛡️ **多層 DRM 檢測**：支援 MediaKeys API、加密事件監聽、EME 支援測試、MPD URL 檢測
+- 🎯 **多 DRM 系統支援**：完整支援 Widevine、PlayReady、FairPlay、ClearKey 四大 DRM 系統
+- 🔧 **Robustness Level 修復**：修復 EME 檢測中的 robustness level 警告問題
+- 📊 **檢測方法追蹤**：新增檢測方法記錄，提供詳細的檢測來源資訊
+- 🧪 **測試基礎設施**：創建 DRM 檢測測試頁面和完整驗證清單
+- 🎬 **平台特定優化**：針對 Netflix、GagaOOLala、Disney+ 等平台的專門檢測優化
+- 🚀 **錯誤處理改進**：增強 DRM 檢測的錯誤處理機制和回退策略
+
 **v2.2.1** (2024-12-23)
 - 🔧 **權限修復**：移除未使用的 management 權限，符合 Chrome Web Store 要求
 - 🐛 **位元率顯示修復**：修正位元率固定顯示 10Mbps 的問題
@@ -265,6 +281,9 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - [x] ~~DASH/HLS 串流格式解析~~
 - [x] ~~即時 FPS 和位元率監控~~
 - [x] ~~QoE Performance Dashboard~~
+- [x] ~~DRM 保護檢測系統~~
+- [x] ~~多層 DRM 檢測機制~~
+- [x] ~~Widevine、PlayReady、FairPlay、ClearKey 支援~~
 - [ ] 提供 TLS 憑證資訊檢測
 - [ ] 多語言介面支援
 - [ ] 資料匯出功能（CSV/JSON）

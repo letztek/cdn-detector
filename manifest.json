@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CDN Detector",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "抓取當前網站的 HTTP Response Header、TLS 證書 Issuer、Remote IP，並判斷是否使用 CDN，提供詳細的快取效能分析與影片播放品質監控。",
   "permissions": [
     "webRequest",
@@ -87,4 +87,4 @@
       "https://*.local/*"
     ]
   }
-}
+} 

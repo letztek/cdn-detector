@@ -26,9 +26,9 @@
     
     // 配置參數
     const CONFIG = {
-        UPDATE_INTERVAL: 500, // 0.5秒更新間隔，實現即時監控
+        UPDATE_INTERVAL: 2000, // 2秒更新間隔，減少對播放的影響
         MAX_ERRORS: 50,
-        DEBUG_MODE: true
+        DEBUG_MODE: false // 關閉調試模式以減少控制台輸出
     };
     
     // 日誌功能
@@ -99,7 +99,221 @@
         return stableId;
     }
     
-    // 視頻品質數據收集
+    // DRM 偵測函數
+    function detectDRMProtection(videoElement) {
+        const drmInfo = {
+            isProtected: false,
+            systems: [],
+            keySystem: null,
+            mediaKeys: null,
+            mpdInfo: null,
+            detectionMethods: []
+        };
+        
+        try {
+            // 方法1: 檢查 MediaKeys API
+            if (videoElement.mediaKeys) {
+                drmInfo.isProtected = true;
+                drmInfo.mediaKeys = {
+                    keySystem: videoElement.mediaKeys.keySystem || 'Unknown'
+                };
+                drmInfo.keySystem = videoElement.mediaKeys.keySystem;
+                drmInfo.detectionMethods.push('MediaKeys API');
+                
+                // 識別 DRM 系統
+                if (drmInfo.keySystem) {
+                    if (drmInfo.keySystem.includes('widevine')) {
+                        drmInfo.systems.push('Widevine');
+                    } else if (drmInfo.keySystem.includes('playready')) {
+                        drmInfo.systems.push('PlayReady');
+                    } else if (drmInfo.keySystem.includes('fairplay')) {
+                        drmInfo.systems.push('FairPlay');
+                    } else if (drmInfo.keySystem.includes('clearkey')) {
+                        drmInfo.systems.push('ClearKey');
+                    }
+                }
+                
+                log(`DRM 偵測 (MediaKeys): ${drmInfo.keySystem}`, 'info');
+            }
+            
+            // 方法2: 監聽 encrypted 事件
+            if (!drmInfo.isProtected) {
+                const handleEncrypted = (event) => {
+                    drmInfo.isProtected = true;
+                    drmInfo.detectionMethods.push('Encrypted Event');
+                    if (event.initDataType) {
+                        drmInfo.initDataType = event.initDataType;
+                    }
+                    log(`DRM 偵測 (Encrypted Event): ${event.initDataType || 'Unknown'}`, 'info');
+                };
+                
+                // 檢查是否已經有 encrypted 事件監聽器
+                if (!videoElement.hasAttribute('data-drm-listener')) {
+                    videoElement.addEventListener('encrypted', handleEncrypted, { once: true });
+                    videoElement.setAttribute('data-drm-listener', 'true');
+                }
+            }
+            
+            // 方法3: 檢查 EME 支援
+            if (navigator.requestMediaKeySystemAccess) {
+                drmInfo.detectionMethods.push('EME Support Check');
+                
+                // 檢查常見的 DRM 系統
+                const keySystems = [
+                    'com.widevine.alpha',
+                    'com.microsoft.playready',
+                    'com.apple.fps.1_0',
+                    'org.w3.clearkey'
+                ];
+                
+                // 嘗試檢測支援的 DRM 系統
+                keySystems.forEach(keySystem => {
+                    try {
+                        const testConfig = [{
+                            initDataTypes: ['cenc'],
+                            videoCapabilities: [{
+                                contentType: 'video/mp4; codecs="avc1.42E01E"',
+                                robustness: 'SW_SECURE_CRYPTO'
+                            }],
+                            audioCapabilities: [{
+                                contentType: 'audio/mp4; codecs="mp4a.40.2"',
+                                robustness: 'SW_SECURE_CRYPTO'
+                            }]
+                        }];
+                        
+                        navigator.requestMediaKeySystemAccess(keySystem, testConfig)
+                            .then(() => {
+                                // 系統支援此 DRM
+                                const systemName = getDRMSystemName(keySystem);
+                                if (!drmInfo.systems.includes(systemName)) {
+                                    drmInfo.systems.push(systemName);
+                                    log(`DRM 系統支援確認: ${systemName}`, 'info');
+                                }
+                            })
+                            .catch(() => {
+                                // 系統不支援此 DRM，嘗試較低的 robustness level
+                                const fallbackConfig = [{
+                                    initDataTypes: ['cenc'],
+                                    videoCapabilities: [{
+                                        contentType: 'video/mp4; codecs="avc1.42E01E"',
+                                        robustness: ''
+                                    }],
+                                    audioCapabilities: [{
+                                        contentType: 'audio/mp4; codecs="mp4a.40.2"',
+                                        robustness: ''
+                                    }]
+                                }];
+                                
+                                return navigator.requestMediaKeySystemAccess(keySystem, fallbackConfig);
+                            })
+                            .then(() => {
+                                // 使用 fallback 配置成功
+                                const systemName = getDRMSystemName(keySystem);
+                                if (!drmInfo.systems.includes(systemName)) {
+                                    drmInfo.systems.push(systemName);
+                                    log(`DRM 系統支援確認 (fallback): ${systemName}`, 'info');
+                                }
+                            })
+                            .catch(() => {
+                                // 完全不支援此 DRM 系統
+                                log(`DRM 系統不支援: ${getDRMSystemName(keySystem)}`, 'debug');
+                            });
+                    } catch (e) {
+                        log(`DRM 系統檢測錯誤 (${keySystem}): ${e.message}`, 'debug');
+                    }
+                });
+            }
+            
+            // 方法4: 檢查 MPD 檔案中的 ContentProtection (針對 DASH)
+            const currentSrc = videoElement.src || videoElement.currentSrc;
+            if (currentSrc && currentSrc.includes('.mpd')) {
+                // 嘗試從 MPD URL 獲取 DRM 資訊
+                drmInfo.mpdInfo = {
+                    url: currentSrc,
+                    detected: true
+                };
+                drmInfo.detectionMethods.push('MPD URL Detection');
+                
+                // 從網路請求記錄中查找 MPD 內容
+                log(`檢測到 MPD 串流: ${currentSrc.substring(0, 100)}...`, 'info');
+                drmInfo.isProtected = true; // MPD 通常表示有 DRM 保護
+                
+                // 檢查 URL 是否包含已知的 DRM 相關參數
+                if (currentSrc.includes('drm') || currentSrc.includes('license') || 
+                    currentSrc.includes('token') || currentSrc.includes('auth')) {
+                    drmInfo.urlIndicatesDRM = true;
+                    drmInfo.detectionMethods.push('URL DRM Indicators');
+                }
+            }
+            
+            // 方法5: 平台特定檢測
+            switch (currentPlatform) {
+                case PLATFORMS.NETFLIX:
+                    // Netflix 總是使用 DRM
+                    drmInfo.isProtected = true;
+                    drmInfo.systems.push('Widevine');
+                    drmInfo.detectionMethods.push('Netflix Platform Detection');
+                    if (navigator.userAgent.includes('Edge') || navigator.userAgent.includes('Safari')) {
+                        drmInfo.systems.push('PlayReady');
+                    }
+                    break;
+                    
+                case PLATFORMS.GAGAOOLALA:
+                    // GagaOOLala 使用 DRM
+                    if (currentSrc && currentSrc.includes('gagaoolala')) {
+                        drmInfo.isProtected = true;
+                        drmInfo.detectionMethods.push('GagaOOLala Platform Detection');
+                        // 根據您提供的 MPD，他們使用 Widevine 和 PlayReady
+                        drmInfo.systems.push('Widevine', 'PlayReady');
+                    }
+                    break;
+                    
+                case PLATFORMS.DISNEY_PLUS:
+                case PLATFORMS.AMAZON_PRIME:
+                case PLATFORMS.HULU:
+                    // 這些平台通常使用 DRM
+                    drmInfo.isProtected = true;
+                    drmInfo.systems.push('Widevine');
+                    drmInfo.detectionMethods.push('Premium Platform Detection');
+                    break;
+            }
+            
+            // 去重 DRM 系統列表
+            drmInfo.systems = [...new Set(drmInfo.systems)];
+            
+            // 如果有任何 DRM 系統被檢測到，標記為受保護
+            if (drmInfo.systems.length > 0) {
+                drmInfo.isProtected = true;
+            }
+            
+            // 記錄 DRM 偵測結果
+            if (drmInfo.isProtected) {
+                log(`✅ DRM 保護已偵測: ${drmInfo.systems.join(', ')} (方法: ${drmInfo.detectionMethods.join(', ')})`, 'info');
+            } else {
+                log(`❌ 未偵測到 DRM 保護`, 'debug');
+            }
+            
+        } catch (error) {
+            log(`DRM 偵測錯誤: ${error.message}`, 'error');
+            // 即使出錯也返回部分結果
+            drmInfo.error = error.message;
+        }
+        
+        return drmInfo;
+    }
+    
+    // 獲取 DRM 系統名稱
+    function getDRMSystemName(keySystem) {
+        const systemMap = {
+            'com.widevine.alpha': 'Widevine',
+            'com.microsoft.playready': 'PlayReady',
+            'com.apple.fps.1_0': 'FairPlay',
+            'org.w3.clearkey': 'ClearKey'
+        };
+        return systemMap[keySystem] || keySystem;
+    }
+    
+    // 收集視頻品質指標
     function collectVideoQualityMetrics(videoElement, videoId) {
         try {
             log(`收集視頻指標，使用videoId: ${videoId}`);
@@ -129,6 +343,9 @@
                 
                 // 播放品質 (如果可用)
                 playbackQuality: null,
+                
+                // DRM 保護資訊
+                drmProtection: detectDRMProtection(videoElement),
                 
                 // 錯誤資訊
                 error: videoElement.error ? {
@@ -405,7 +622,10 @@
         
         const eventHandlers = {};
         
-        events.forEach(eventName => {
+        // 只監聽關鍵事件，避免過度監聽
+        const criticalEvents = ['play', 'pause', 'ended', 'error', 'loadedmetadata', 'canplay'];
+        
+        criticalEvents.forEach(eventName => {
             const handler = function(event) {
                 try {
                     const eventData = {
@@ -420,8 +640,8 @@
                     videoData.events.push(eventData);
                     
                     // 限制事件數量
-                    if (videoData.events.length > 1000) {
-                        videoData.events = videoData.events.slice(-500);
+                    if (videoData.events.length > 100) {
+                        videoData.events = videoData.events.slice(-50);
                     }
                     
                     log(`視頻事件 ${eventName} - ${videoId}`);
@@ -438,7 +658,7 @@
         // 保存事件處理器引用以便後續清理
         videoData.eventHandlers = eventHandlers;
         
-        // 定期收集指標
+        // 定期收集指標 - 降低頻率以避免影響播放
         const metricsInterval = setInterval(() => {
             if (!videoData.active || !document.contains(videoElement)) {
                 clearInterval(metricsInterval);
@@ -446,16 +666,19 @@
                 return;
             }
             
-            const metrics = collectVideoQualityMetrics(videoElement, videoId);
-            if (metrics) {
-                videoData.metrics.push(metrics);
-                
-                // 限制指標數量
-                if (videoData.metrics.length > 200) {
-                    videoData.metrics = videoData.metrics.slice(-100);
+            // 只在影片播放時收集詳細指標
+            if (!videoElement.paused && videoElement.readyState >= 2) {
+                const metrics = collectVideoQualityMetrics(videoElement, videoId);
+                if (metrics) {
+                    videoData.metrics.push(metrics);
+                    
+                    // 限制指標數量
+                    if (videoData.metrics.length > 200) {
+                        videoData.metrics = videoData.metrics.slice(-100);
+                    }
                 }
             }
-        }, CONFIG.UPDATE_INTERVAL);
+        }, Math.max(CONFIG.UPDATE_INTERVAL * 2, 1000)); // 至少1秒間隔
         
         videoData.metricsInterval = metricsInterval;
     }
@@ -743,7 +966,7 @@
                 sendVideoQualityUpdate();
                 cleanupInactiveMonitoring();
             }
-        }, CONFIG.UPDATE_INTERVAL);
+        }, Math.max(CONFIG.UPDATE_INTERVAL * 3, 5000)); // 至少5秒間隔
         
         log('Periodic updates started', 'debug');
     }

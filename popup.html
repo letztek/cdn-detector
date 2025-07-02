@@ -731,6 +731,31 @@
       font-weight: 600;
     }
     
+    /* DRM 保護資訊 */
+    .drm-info {
+      margin-top: var(--spacing-lg);
+      padding-top: var(--spacing-lg);
+      border-top: 1px solid var(--border-color);
+    }
+    
+    .drm-info h4 {
+      color: var(--dark-color);
+      margin: 0 0 var(--spacing-md) 0;
+      font-size: clamp(12px, 2.5vw, 14px);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+    }
+    
+    .drm-info .info-item {
+      transition: all 0.2s ease;
+    }
+    
+    .drm-info .info-item:hover {
+      background: rgba(102, 126, 234, 0.05);
+      transform: translateX(2px);
+    }
+    
     .info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -858,60 +883,60 @@
   
   <!-- CDN 檢測標籤頁內容 -->
   <div id="cdn-tab" class="tab-content">
-    <div class="toggle">
-      <label class="header">啟用 CDN 檢測</label>
-      <label class="switch">
-        <input type="checkbox" id="enableToggle">
-        <span class="slider"></span>
-      </label>
-    </div>
-    
-    <div class="status-section">
-      <p><span class="status-indicator" id="statusIndicator"></span>檢測狀態：<span id="detectionStatus">未啟用</span></p>
-      <p>檢測結果：<span id="detectionResult">N/A</span></p>
-    </div>
-    
+  <div class="toggle">
+    <label class="header">啟用 CDN 檢測</label>
+    <label class="switch">
+      <input type="checkbox" id="enableToggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+  
+  <div class="status-section">
+    <p><span class="status-indicator" id="statusIndicator"></span>檢測狀態：<span id="detectionStatus">未啟用</span></p>
+    <p>檢測結果：<span id="detectionResult">N/A</span></p>
+  </div>
+  
     <!-- 快取分析區域 - 移到 CDN 檢測標籤頁內 -->
-    <div class="cache-analysis" id="cacheAnalysis" style="display: none;">
-      <h3>快取效能分析</h3>
-      
-      <div class="stats-grid">
-        <div class="stat-card hit">
-          <div class="stat-value" id="hitRatio">0%</div>
-          <div class="stat-label">HIT 比例</div>
-        </div>
-        <div class="stat-card miss">
-          <div class="stat-value" id="sizeRatio">0%</div>
-          <div class="stat-label">大小 HIT 比例</div>
-        </div>
-        <div class="stat-card speed">
-          <div class="stat-value" id="overallSpeed">0 MB/s</div>
-          <div class="stat-label">整體速度</div>
-        </div>
-        <div class="stat-card size">
-          <div class="stat-value" id="totalSize">0 B</div>
-          <div class="stat-label">總資料量</div>
-        </div>
+  <div class="cache-analysis" id="cacheAnalysis" style="display: none;">
+    <h3>快取效能分析</h3>
+    
+    <div class="stats-grid">
+      <div class="stat-card hit">
+        <div class="stat-value" id="hitRatio">0%</div>
+        <div class="stat-label">HIT 比例</div>
       </div>
-      
-      <div style="margin-bottom: 10px;">
-        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
-          <span>快取命中率</span>
-          <span id="hitRatioText">0% (0/0)</span>
-        </div>
-        <div class="progress-bar">
-          <div class="progress-fill" id="hitProgressBar" style="width: 0%;"></div>
-        </div>
+      <div class="stat-card miss">
+        <div class="stat-value" id="sizeRatio">0%</div>
+        <div class="stat-label">大小 HIT 比例</div>
       </div>
-      
-      <div class="speed-comparison" id="speedComparison" style="display: none;">
-        <div class="speed-item hit">
-          <div class="speed-dot hit"></div>
-          <span>HIT: <span id="hitSpeed">0</span> MB/s</span>
-        </div>
-        <div class="speed-item miss">
-          <div class="speed-dot miss"></div>
-          <span>MISS: <span id="missSpeed">0</span> MB/s</span>
+      <div class="stat-card speed">
+        <div class="stat-value" id="overallSpeed">0 MB/s</div>
+        <div class="stat-label">整體速度</div>
+      </div>
+      <div class="stat-card size">
+        <div class="stat-value" id="totalSize">0 B</div>
+        <div class="stat-label">總資料量</div>
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+        <span>快取命中率</span>
+        <span id="hitRatioText">0% (0/0)</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="hitProgressBar" style="width: 0%;"></div>
+      </div>
+    </div>
+    
+    <div class="speed-comparison" id="speedComparison" style="display: none;">
+      <div class="speed-item hit">
+        <div class="speed-dot hit"></div>
+        <span>HIT: <span id="hitSpeed">0</span> MB/s</span>
+      </div>
+      <div class="speed-item miss">
+        <div class="speed-dot miss"></div>
+        <span>MISS: <span id="missSpeed">0</span> MB/s</span>
         </div>
       </div>
     </div>
@@ -984,6 +1009,29 @@
             <span id="playbackState">未知</span>
           </div>
           <!-- 音量顯示已移除，因為無法穩定獲取音量數據 -->
+        </div>
+      </div>
+      
+      <!-- DRM 保護資訊 -->
+      <div class="drm-info" id="drmInfo" style="display: none;">
+        <h4>🔒 DRM 保護資訊</h4>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">保護狀態：</span>
+            <span id="drmStatus">未偵測</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">DRM 系統：</span>
+            <span id="drmSystems">N/A</span>
+          </div>
+          <div class="info-item" id="keySystemItem" style="display: none;">
+            <span class="info-label">金鑰系統：</span>
+            <span id="keySystem">N/A</span>
+          </div>
+          <div class="info-item" id="mpdStreamItem" style="display: none;">
+            <span class="info-label">串流類型：</span>
+            <span id="streamType">N/A</span>
+          </div>
         </div>
       </div>
     </div>
