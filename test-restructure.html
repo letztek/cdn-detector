@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDN Detector 架構重組測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .info { background: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        #results { margin-top: 20px; }
+        .log-entry {
+            padding: 5px;
+            margin: 2px 0;
+            border-left: 3px solid #007bff;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <h1>CDN Detector 架構重組測試</h1>
+    
+    <div class="test-section info">
+        <h2>測試目的</h2>
+        <p>驗證專案架構重組後，CDN 檢測功能是否正常運作，確保向後相容性。</p>
+    </div>
+
+    <div class="test-section">
+        <h2>檔案結構檢查</h2>
+        <button onclick="checkFileStructure()">檢查檔案結構</button>
+        <div id="structure-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>擴充功能狀態檢查</h2>
+        <button onclick="checkExtensionStatus()">檢查擴充功能</button>
+        <div id="extension-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>CDN 檢測功能測試</h2>
+        <button onclick="testCDNDetection()">測試 CDN 檢測</button>
+        <div id="cdn-results"></div>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${message}`;
+            results.appendChild(entry);
+        }
+
+        async function checkFileStructure() {
+            const structureDiv = document.getElementById('structure-results');
+            structureDiv.innerHTML = '<p>檢查檔案結構...</p>';
+            
+            const expectedPaths = [
+                'src/core/legacy-cdn-detector.js',
+                'src/ui/legacy/popup.html',
+                'src/ui/legacy/popup.js',
+                'src/ui/legacy/video-quality-monitor.js'
+            ];
+            
+            log('開始檢查檔案結構', 'info');
+            
+            // 模擬檔案檢查 (實際中會需要 chrome.runtime API)
+            let allFound = true;
+            const results = [];
+            
+            for (const path of expectedPaths) {
+                try {
+                    // 這裡應該使用 chrome.runtime.getURL() 檢查檔案
+                    const url = chrome.runtime.getURL(path);
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        results.push(`✅ ${path} - 存在`);
+                        log(`檔案存在: ${path}`, 'success');
+                    } else {
+                        results.push(`❌ ${path} - 不存在`);
+                        log(`檔案不存在: ${path}`, 'error');
+                        allFound = false;
+                    }
+                } catch (error) {
+                    results.push(`❌ ${path} - 檢查失敗: ${error.message}`);
+                    log(`檔案檢查失敗: ${path} - ${error.message}`, 'error');
+                    allFound = false;
+                }
+            }
+            
+            structureDiv.innerHTML = `
+                <h3>檔案結構檢查結果</h3>
+                <ul>
+                    ${results.map(r => `<li>${r}</li>`).join('')}
+                </ul>
+                <p class="${allFound ? 'success' : 'error'}">
+                    ${allFound ? '✅ 所有檔案都存在' : '❌ 有檔案缺失'}
+                </p>
+            `;
+        }
+
+        async function checkExtensionStatus() {
+            const extensionDiv = document.getElementById('extension-results');
+            extensionDiv.innerHTML = '<p>檢查擴充功能狀態...</p>';
+            
+            log('開始檢查擴充功能狀態', 'info');
+            
+            try {
+                // 檢查 Chrome 擴充功能 API 是否可用
+                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                    log('Chrome 擴充功能 API 可用', 'success');
+                    
+                    // 檢查 manifest 版本
+                    const manifest = chrome.runtime.getManifest();
+                    log(`Manifest 版本: ${manifest.version}`, 'info');
+                    log(`Service Worker: ${manifest.background.service_worker}`, 'info');
+                    
+                    extensionDiv.innerHTML = `
+                        <h3>擴充功能狀態</h3>
+                        <ul>
+                            <li>✅ Chrome 擴充功能 API 可用</li>
+                            <li>✅ Extension ID: ${chrome.runtime.id}</li>
+                            <li>✅ 版本: ${manifest.version}</li>
+                            <li>✅ Service Worker: ${manifest.background.service_worker}</li>
+                        </ul>
+                    `;
+                } else {
+                    throw new Error('Chrome 擴充功能 API 不可用');
+                }
+            } catch (error) {
+                log(`擴充功能檢查失敗: ${error.message}`, 'error');
+                extensionDiv.innerHTML = `<p class="error">❌ 擴充功能檢查失敗: ${error.message}</p>`;
+            }
+        }
+
+        async function testCDNDetection() {
+            const cdnDiv = document.getElementById('cdn-results');
+            cdnDiv.innerHTML = '<p>測試 CDN 檢測功能...</p>';
+            
+            log('開始測試 CDN 檢測功能', 'info');
+            
+            try {
+                // 發送消息到 background script 測試 CDN 檢測
+                const response = await chrome.runtime.sendMessage({
+                    type: 'TEST_CDN_DETECTION',
+                    url: window.location.href
+                });
+                
+                if (response && response.success) {
+                    log('CDN 檢測功能正常', 'success');
+                    cdnDiv.innerHTML = `
+                        <h3>CDN 檢測測試結果</h3>
+                        <p class="success">✅ CDN 檢測功能正常運作</p>
+                        <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                    `;
+                } else {
+                    throw new Error(response?.error || '未知錯誤');
+                }
+            } catch (error) {
+                log(`CDN 檢測測試失敗: ${error.message}`, 'error');
+                cdnDiv.innerHTML = `<p class="error">❌ CDN 檢測測試失敗: ${error.message}</p>`;
+            }
+        }
+
+        // 頁面載入時自動執行基本檢查
+        document.addEventListener('DOMContentLoaded', function() {
+            log('頁面載入完成，開始架構重組測試', 'info');
+            setTimeout(checkExtensionStatus, 500);
+        });
+    </script>
+</body>
+</html>
