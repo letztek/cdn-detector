@@ -30,10 +30,10 @@ node_modules/
 .roo/
 .roomodes
 
-# Task files
-tasks.json
-tasks/ 
-
 # CDN reference files
 *CDN*.txt
 *.zip 
+
+# Task files
+# tasks.json
+# tasks/ 

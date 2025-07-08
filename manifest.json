@@ -7,7 +7,8 @@
     "webRequest",
     "activeTab",
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js"
@@ -71,6 +72,7 @@
     "default_popup": "popup.html",
     "default_icon": "icon.png"
   },
+
 
   "externally_connectable": {
     "matches": [
