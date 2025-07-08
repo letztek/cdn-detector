@@ -5,9 +5,6 @@ let requestStartTimes = {}; // 新增：追蹤請求開始時間
 let currentTabId = null; // 新增：當前活躍標籤頁 ID
 let tabDetectionData = {}; // 新增：按標籤頁分組的檢測資料
 
-// 新增：安全檢查器管理器
-let securityManager = null;
-
 // 新增：Manifest 攔截與解析系統
 let manifestMap = {}; // 儲存解析的 manifest 資料，按 tabId 分組
 let manifestRequestQueue = new Map(); // 處理中的 manifest 請求佇列
@@ -35,31 +32,6 @@ function logMessage(message, level = 'info') {
     
     chrome.storage.local.set({ debugLogs: logs });
   });
-}
-
-// 新增：初始化安全檢查器管理器
-async function initializeSecurityManager() {
-  try {
-    // 載入 SecurityManager 類別
-    const securityManagerUrl = chrome.runtime.getURL('src/core/security-manager.js');
-    const response = await fetch(securityManagerUrl);
-    const moduleCode = await response.text();
-    
-    // 使用 eval 載入模組（在擴展環境中是安全的）
-    eval(moduleCode);
-    
-    // 創建 SecurityManager 實例
-    if (typeof SecurityManager !== 'undefined') {
-      securityManager = new SecurityManager();
-      logMessage('SecurityManager initialized successfully', 'info');
-      return true;
-    } else {
-      throw new Error('SecurityManager not available after loading');
-    }
-  } catch (error) {
-    logMessage(`Failed to initialize SecurityManager: ${error.message}`, 'error');
-    return false;
-  }
 }
 
 // 新增：獲取資源類型
@@ -2250,111 +2222,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         break;
         
-      // 安全檢查器相關消息
-      case 'GET_SECURITY_DATA':
-        (async () => {
-          try {
-            if (!securityManager) {
-              sendResponse({ 
-                success: false, 
-                error: 'Security manager not initialized' 
-              });
-              return;
-            }
-            
-            const tabId = message.tabId || (sender.tab ? sender.tab.id : null);
-            if (!tabId) {
-              sendResponse({ 
-                success: false, 
-                error: 'No tab ID provided' 
-              });
-              return;
-            }
-            
-            const securityData = await securityManager.getTabSecurityData(tabId);
-            sendResponse({
-              success: true,
-              data: securityData,
-              timestamp: Date.now()
-            });
-          } catch (error) {
-            sendResponse({ 
-              success: false, 
-              error: error.message 
-            });
-          }
-        })();
-        return true; // 保持 sendResponse 活躍
-        
-      case 'GET_SECURITY_STATUS':
-        try {
-          const status = securityManager ? securityManager.getStatus() : { 
-            enabled: false, 
-            error: 'Security manager not initialized' 
-          };
-          sendResponse({
-            success: true,
-            status: status,
-            timestamp: Date.now()
-          });
-        } catch (error) {
-          sendResponse({ 
-            success: false, 
-            error: error.message 
-          });
-        }
-        break;
-        
-      case 'TOGGLE_SECURITY_MANAGER':
-        try {
-          if (!securityManager) {
-            sendResponse({ 
-              success: false, 
-              error: 'Security manager not initialized' 
-            });
-            return;
-          }
-          
-          const enabled = message.enabled;
-          securityManager.setEnabled(enabled);
-          
-          sendResponse({
-            success: true,
-            enabled: enabled,
-            timestamp: Date.now()
-          });
-        } catch (error) {
-          sendResponse({ 
-            success: false, 
-            error: error.message 
-          });
-        }
-        break;
-        
-      case 'GET_SECURITY_STATS':
-        try {
-          if (!securityManager) {
-            sendResponse({ 
-              success: false, 
-              error: 'Security manager not initialized' 
-            });
-            return;
-          }
-          
-          const stats = securityManager.getStatistics();
-          sendResponse({
-            success: true,
-            stats: stats,
-            timestamp: Date.now()
-          });
-        } catch (error) {
-          sendResponse({ 
-            success: false, 
-            error: error.message 
-          });
-        }
-        break;
-        
       default:
         // 未知消息類型
         logMessage(`Unknown message type: ${message.type}`, 'warn');
@@ -2377,15 +2244,6 @@ function startListening() {
   }
   
   logMessage('Starting CDN detection listener');
-  
-  // 新增：初始化安全檢查器管理器
-  initializeSecurityManager().then(success => {
-    if (success) {
-      logMessage('Security manager ready for operation', 'info');
-    } else {
-      logMessage('Security manager failed to initialize, continuing without security checks', 'warn');
-    }
-  });
   
   // 新增：監聽請求開始，記錄開始時間
   beforeRequestListener = chrome.webRequest.onBeforeRequest.addListener(
@@ -2464,13 +2322,6 @@ function startListening() {
           }
         }
         const cdnDetection = detectCDN(headers, url);
-        
-        // 新增：並行執行安全檢測（不阻塞 CDN 檢測）
-        if (securityManager) {
-          securityManager.handleSecurityCheck(details).catch(error => {
-            logMessage(`Security check failed: ${error.message}`, 'error');
-          });
-        }
         
         // 新增：收集 Content-Length
         const contentLengthHeader = headers.find(header => header.name.toLowerCase() === 'content-length');
