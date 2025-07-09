@@ -1,9 +1,26 @@
 # CDN Detector
 
 ## 專案介紹
-CDN Detector 是一個 Google Chrome 擴充功能，專門用於檢測當前網頁的資源是否經由多種 CDN 服務傳遞，並提供詳細的檢測結果、快取效能分析和實時日誌。支援 Cloudflare、Amazon CloudFront、Fastly、KeyCDN、Microsoft Azure CDN、Google Cloud CDN、Akamai、AspirappsCDN 等 8 大主流 CDN 服務。
+CDN Detector 是一個功能強大的 Google Chrome 擴充功能，整合了三大核心功能：**CDN 檢測分析**、**網站安全檢測**和**影片品質監控**。支援 Cloudflare、Amazon CloudFront、Fastly、KeyCDN、Microsoft Azure CDN、Google Cloud CDN、Akamai、AspirappsCDN 等 8 大主流 CDN 服務檢測。
+
+**v2.4.0 重大更新**：完整實現專業級網站安全檢測器，包含 5 大安全標頭檢測（CSP、HSTS、X-Frame-Options、X-Content-Type-Options、Referrer-Policy）、智能評分系統（0-100 分）、統一安全檢查器 UI 以及智能建議系統。提供企業級的網站安全評估能力。
 
 ## 主要功能
+
+### 🔐 專業安全檢測器 (v2.4.0 全新功能)
+- 🛡️ **完整安全標頭檢測**：CSP、HSTS、X-Frame-Options、X-Content-Type-Options、Referrer-Policy 等 5 大安全標頭
+- 📊 **智能評分系統**：0-100 分安全評分，提供 Excellent/Good/Fair/Poor/Critical 五級評級
+- 🔒 **CSP 深度分析**：Content Security Policy 指令分析，檢查 unsafe-inline、unsafe-eval 等安全風險
+- 🚫 **Frame Protection**：X-Frame-Options 和 CSP frame-ancestors 檢測，防止 Clickjacking 攻擊
+- 🔐 **HSTS 配置分析**：Strict-Transport-Security 標頭檢測，分析 max-age、includeSubDomains、preload 配置
+- 🛡️ **Content-Type 保護**：X-Content-Type-Options 檢測，防止 MIME 類型嗅探攻擊
+- 🔍 **Referrer Policy 隱私分析**：Referrer-Policy 標頭檢測，分析隱私保護等級
+- 🎯 **統一安全檢查器**：整合所有安全檢測結果的統一標籤頁
+- 📊 **視覺化狀態指示**：彩色編碼的狀態徽章和評分顯示
+- 🔄 **即時檢測**：即時檢測並評估網站安全配置
+- 🧠 **智能建議系統**：根據檢測結果提供安全配置建議
+
+### 📊 CDN 檢測與分析
 - 🔍 **多 CDN 檢測**：自動檢測 8 大主流 CDN 服務（Cloudflare、CloudFront、Fastly、KeyCDN、Azure CDN、Google Cloud CDN、Akamai、AspirappsCDN）
 - 📊 **統計儀表板**：顯示 CDN 分佈和資源使用詳細比例
 - 📝 **實時日誌**：完整記錄所有檢測過程和結果
@@ -15,8 +32,8 @@ CDN Detector 是一個 Google Chrome 擴充功能，專門用於檢測當前網�
 - 📏 **檔案大小統計**：收集 Content-Length 並計算傳輸資料量
 - ⏱️ **響應時間監控**：測量每個資源的載入時間
 - 🎛️ **分標籤頁統計**：獨立追蹤每個標籤頁的 CDN 使用情況
-- 📱 **響應式介面**：適配不同螢幕尺寸，寬敞易讀的使用者介面
-- 🎬 **影片品質監控**：實時監控影片播放品質，包含 QoE 指標分析
+
+### 🎬 影片品質監控
 - 📺 **多平台支援**：支援 YouTube、Netflix、Twitch、Vimeo 等主流影音平台
 - 📊 **QoE Dashboard**：專業的影片品質體驗監控儀表板
 - 🎥 **串流分析**：DASH/HLS 串流格式檢測與分析
@@ -24,6 +41,12 @@ CDN Detector 是一個 Google Chrome 擴充功能，專門用於檢測當前網�
 - 🔒 **DRM 保護檢測**：全面檢測數位版權管理（DRM）系統，支援 Widevine、PlayReady、FairPlay、ClearKey
 - 🛡️ **多層 DRM 檢測**：MediaKeys API、加密事件監聽、EME 支援測試、MPD URL 檢測等多重檢測機制
 - 🎯 **平台特定檢測**：針對 Netflix、GagaOOLala、Disney+ 等平台的專門 DRM 檢測優化
+
+### 📱 使用者體驗
+- 📱 **響應式介面**：適配不同螢幕尺寸，寬敞易讀的使用者介面
+- 🎛️ **分標籤頁設計**：CDN 檢測、安全檢測、影片品質三大功能區域
+- 🎯 **智能提醒**：視覺化的狀態指示器和彩色編碼
+- 🔄 **即時更新**：自動重新整理檢測結果，保持資料最新
 
 ## 安裝步驟
 1. 下載專案檔案到本地
@@ -37,12 +60,13 @@ CDN Detector 是一個 Google Chrome 擴充功能，專門用於檢測當前網�
 ### 基本使用
 1. 點擊 Chrome 工具列上的 CDN Detector 圖標
 2. 擴充功能預設為**啟用狀態**，會自動開始檢測
-3. 瀏覽任意包含 AspirappsCDN 資源的網頁
+3. 瀏覽任意網頁開始檢測
 4. 查看即時統計結果和詳細日誌
 
 ### 介面說明
-擴充功能的主要介面包含以下區域：
+擴充功能採用分標籤頁設計，包含三大功能區域：
 
+#### 🔍 CDN 檢測標籤頁
 **統計摘要區**：
 - CDN 使用率百分比和資源數量
 - 快取 HIT Ratio（數量比例）
@@ -61,6 +85,35 @@ CDN Detector 是一個 Google Chrome 擴充功能，專門用於檢測當前網�
 - 快取狀態指示（🟢 HIT / 🔴 MISS / ⚪ Unknown）
 - 檔案大小和響應時間
 - 可展開查看完整 Headers 資訊（手動控制，不會自動收起）
+
+#### 🔐 安全檢測標籤頁
+**安全評分總覽**：
+- 0-100 分的整體安全評分
+- Excellent/Good/Fair/Poor/Critical 五級評級
+- 圓形評分顯示器，直觀展示安全狀態
+
+**安全標頭檢測結果**：
+- **CSP 檢測**：Content Security Policy 配置分析
+- **Frame Protection**：X-Frame-Options 和 frame-ancestors 檢測
+- **HSTS 檢測**：Strict-Transport-Security 配置分析
+- **Content-Type 保護**：X-Content-Type-Options 檢測
+- **Referrer Policy**：Referrer-Policy 隱私保護分析
+
+**視覺化狀態指示**：
+- 🟢 優秀配置 / 🟡 基本配置 / 🔴 缺失或弱配置
+- 分數徽章顯示各項安全指標評分
+- 詳細分析和建議資訊
+
+#### 🎬 影片品質標籤頁
+**影片品質統計**：
+- 解析度、位元率、幀率、緩衝事件等關鍵指標
+- 掉幀統計和播放資訊
+- DRM 保護狀態檢測
+
+**QoE 監控**：
+- 即時影片品質監控
+- 多平台支援（YouTube、Netflix、Twitch 等）
+- 品質歷史記錄和趨勢分析
 
 ### 日誌功能
 - **查看 CDN 資源**：預設顯示所有使用 CDN 的資源，支援多 CDN 分類顯示
@@ -132,28 +185,44 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - 🔴 **紅燈**：未檢測到任何 CDN 資源
 
 ## 技術特色
+
+### 核心架構
 - **Manifest V3**：使用最新的 Chrome 擴充功能標準
 - **Service Worker**：高效能的背景處理
 - **即時通訊**：Popup 與 Background 間的即時數據同步
 - **錯誤處理**：完整的 API 錯誤處理和降級方案
 - **效能最佳化**：自動日誌清理和記憶體管理
 - **分標籤頁管理**：獨立追蹤每個標籤頁的資源和統計，完全隔離
+
+### CDN 檢測技術
 - **多 CDN 架構**：支援 8 大 CDN 服務的同時檢測和分析
 - **統一快取解析**：智慧解析各種 CDN 的快取狀態格式
 - **響應時間測量**：精確測量網路請求的響應時間
 - **健康檢查機制**：自動檢測 Background Script 運行狀態
 - **重試機制**：連接失敗時自動重試，提升穩定性
-- **智能刷新**：展開詳細資訊時暫停自動刷新，提升使用體驗
-- **響應式設計**：適配多種螢幕尺寸，寬敞易讀的介面
-- **影片品質監控**：Content Script 注入技術，即時監控影片元素
+
+### 安全檢測技術
+- **模組化檢測器**：每個安全標頭都有專門的檢測器模組
+- **加權評分系統**：基於權重的 0-100 分安全評分算法
+- **智能解析**：支援各種安全標頭格式的智能解析
+- **錯誤隔離**：安全檢測模組完全獨立，不影響其他功能
+- **即時評估**：即時檢測並評估網站安全配置
+
+### 影片品質監控技術
+- **Content Script 注入**：即時監控影片元素
 - **QoE 指標計算**：七大關鍵指標演算法，專業品質評估
 - **串流格式解析**：DASH/HLS manifest 檔案解析與分析
 - **多層 FPS 檢測**：MediaStream API、計算方法等多重檢測機制
-- **即時視覺化**：彩色狀態指示器，直觀呈現數據品質
-- **跨平台相容**：支援多種影音串流平台的統一監控
 - **DRM 檢測**：全面檢測數位版權管理（DRM）系統，支援 Widevine、PlayReady、FairPlay、ClearKey
 - **多層 DRM 檢測**：MediaKeys API、加密事件監聽、EME 支援測試、MPD URL 檢測等多重檢測機制
 - **平台特定檢測**：針對 Netflix、GagaOOLala、Disney+ 等平台的專門 DRM 檢測優化
+
+### 使用者體驗技術
+- **智能刷新**：展開詳細資訊時暫停自動刷新，提升使用體驗
+- **響應式設計**：適配多種螢幕尺寸，寬敞易讀的介面
+- **即時視覺化**：彩色狀態指示器，直觀呈現數據品質
+- **跨平台相容**：支援多種影音串流平台的統一監控
+- **分標籤頁設計**：三大功能區域的清晰分離
 
 ## 故障排除
 
@@ -188,6 +257,21 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
    - 展開的詳細資訊不會被自動刷新影響
    - 如仍有問題，請重新載入擴充功能
 
+### 安全檢測問題
+7. **安全檢測未顯示結果**：
+   - 確認已切換到「安全檢測」標籤頁
+   - 點擊「重新整理」按鈕重新檢測
+   - 確認網站有回應標頭（某些靜態頁面可能沒有安全標頭）
+
+8. **安全評分顯示 0 分**：
+   - 網站可能確實缺少安全標頭配置
+   - 檢查瀏覽器開發者工具的 Network 標籤查看 Response Headers
+   - 某些網站僅在 main_frame 請求中包含安全標頭
+
+9. **部分安全檢測結果缺失**：
+   - 這是正常現象，不是所有網站都會配置所有安全標頭
+   - 可參考檢測結果中的建議進行安全配置改進
+
 ### 調試模式
 開啟瀏覽器開發者工具（F12），查看 Console 標籤中的詳細日誌輸出。
 
@@ -198,11 +282,27 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - **host_permissions**：存取所有網站的請求資料
 
 ## 版本資訊
-- **版本**：2.3.0
+- **版本**：2.4.0
 - **Manifest 版本**：V3
 - **相容性**：Chrome 88+
 
 ### 更新歷史
+
+**v2.4.0** (2025-01-09) - 🔐 **安全檢測器完整版本**
+- 🛡️ **完整安全標頭檢測系統**：全新實現 5 大安全標頭檢測（CSP、HSTS、X-Frame-Options、X-Content-Type-Options、Referrer-Policy）
+- 📊 **智能評分系統**：0-100 分的安全評分，提供 Excellent/Good/Fair/Poor/Critical 五級評級
+- 🎯 **專門檢測器模組**：每個安全標頭都有專門的檢測器模組，提供詳細分析和建議
+- 🔒 **CSP 深度分析**：檢查 unsafe-inline、unsafe-eval 等安全風險，分析指令配置
+- 🚫 **Frame Protection 防護**：X-Frame-Options 和 CSP frame-ancestors 檢測，防止 Clickjacking 攻擊
+- 🔐 **HSTS 配置分析**：詳細分析 max-age、includeSubDomains、preload 等配置
+- 🛡️ **Content-Type 保護**：X-Content-Type-Options 檢測，防止 MIME 類型嗅探攻擊
+- 🔍 **Referrer Policy 隱私分析**：詳細分析隱私保護等級（maximum、high、moderate、low、very-low）
+- 🎛️ **統一安全檢查器**：整合所有安全檢測結果的統一標籤頁，圓形評分顯示器
+- 📊 **視覺化狀態指示**：彩色編碼的狀態徽章（🟢🟡🔴）和評分顯示
+- 🧠 **智能建議系統**：根據檢測結果提供具體的安全配置建議
+- 🔄 **即時檢測**：即時檢測並評估網站安全配置，支援手動重新整理
+- 🚀 **錯誤隔離機制**：安全檢測模組完全獨立，不影響其他功能
+- 📋 **完整測試覆蓋**：每個檢測器都有完整的測試檔案和驗證機制
 **v2.3.0** (2024-12-23)
 - 🔒 **DRM 檢測功能**：全新實現數位版權管理（DRM）系統檢測
 - 🛡️ **多層 DRM 檢測**：支援 MediaKeys API、加密事件監聽、EME 支援測試、MPD URL 檢測
@@ -267,6 +367,8 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - ✨ 資源分類和過濾功能
 
 ## 開發計畫
+
+### 已完成功能
 - [x] ~~AspirappsCDN 快取狀態分析~~
 - [x] ~~HIT Ratio 統計功能~~
 - [x] ~~檔案大小和響應時間監控~~
@@ -284,6 +386,15 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - [x] ~~DRM 保護檢測系統~~
 - [x] ~~多層 DRM 檢測機制~~
 - [x] ~~Widevine、PlayReady、FairPlay、ClearKey 支援~~
+- [x] ~~完整安全檢測器系統 (v2.4.0)~~
+- [x] ~~安全標頭檢測（CSP、HSTS、Frame Protection、Content-Type、Referrer Policy）~~
+- [x] ~~安全評分系統 (0-100 分，五級評級)~~
+- [x] ~~統一安全檢查器 UI（圓形評分顯示器）~~
+- [x] ~~專門檢測器模組（每個安全標頭獨立檢測器）~~
+- [x] ~~智能建議系統（根據檢測結果提供安全配置建議）~~
+- [x] ~~完整測試覆蓋（每個檢測器的測試檔案）~~
+
+### 待開發功能
 - [ ] 提供 TLS 憑證資訊檢測
 - [ ] 多語言介面支援
 - [ ] 資料匯出功能（CSV/JSON）
@@ -294,6 +405,9 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 - [ ] 自訂 CDN 檢測規則
 - [ ] 影片品質歷史記錄
 - [ ] QoE 報告匯出功能
+- [ ] 安全配置建議系統擴展
+- [ ] 更多安全標頭支援（Permissions-Policy、Feature-Policy 等）
+- [ ] 安全檢測歷史記錄和趨勢分析
 
 ## 授權條款
 本專案採用 MIT 授權條款。
@@ -305,24 +419,39 @@ Via Code 第四個字節：H=HIT, M=MISS, S=MISS(stale), A=MISS(not acceptable),
 
 ## 🎯 核心特色總結
 
-### 多 CDN 檢測支援
+### 🔍 多 CDN 檢測支援
 - **8 大主流 CDN**：Cloudflare、Amazon CloudFront、Fastly、KeyCDN、Microsoft Azure CDN、Google Cloud CDN、Akamai、AspirappsCDN
 - **同時檢測**：支援單一資源被多個 CDN 服務檢測
 - **信心度分級**：高/中/低信心度檢測，確保準確性
+- **統一快取解析**：支援各 CDN 的快取狀態格式
+- **多維度統計**：數量比例、大小比例、響應時間分析
 
-### 分頁隔離功能
-- **完全隔離**：每個分頁的檢測結果獨立儲存，互不影響
-- **自動清理**：分頁關閉時自動清理對應的檢測資料
-- **導航重置**：分頁導航到新網址時自動重置檢測資料
-- **記憶體管理**：定期清理過期分頁資料，避免記憶體洩漏
+### 🔐 全面安全檢測 (v2.4.0 完整實現)
+- **五大安全標頭**：CSP、HSTS、X-Frame-Options、X-Content-Type-Options、Referrer-Policy
+- **智能評分系統**：0-100 分安全評分，五級評級（Excellent/Good/Fair/Poor/Critical）
+- **專門檢測器模組**：每個安全標頭都有專門的檢測器模組，提供詳細分析
+- **即時分析**：即時檢測並評估網站安全配置，支援手動重新整理
+- **視覺化指示**：彩色編碼的狀態徽章（🟢🟡🔴）和評分顯示
+- **智能建議系統**：根據檢測結果提供具體的安全配置建議
+- **錯誤隔離機制**：完全獨立的安全檢測模組，不影響其他功能
 
-### 智能使用者體驗
+### 🎬 影片品質監控
+- **多平台支援**：YouTube、Netflix、Twitch、Vimeo 等主流平台
+- **QoE 指標計算**：七大關鍵指標演算法
+- **DRM 檢測**：Widevine、PlayReady、FairPlay、ClearKey 支援
+- **串流格式解析**：DASH/HLS manifest 檔案解析
+- **即時監控**：幀率、位元率、緩衝狀態追蹤
+
+### 📱 智能使用者體驗
+- **分標籤頁設計**：CDN 檢測、安全檢測、影片品質三大功能區域
 - **響應式設計**：適配多種螢幕尺寸，寬敞易讀
 - **智能刷新**：展開詳細資訊時暫停自動更新
 - **手動控制**：詳細資訊完全由使用者控制展開/收起
 - **即時統計**：CDN 分佈、命中率、效能指標一目了然
 
-### 進階分析功能
-- **統一快取解析**：支援各 CDN 的快取狀態格式
-- **多維度統計**：數量比例、大小比例、響應時間分析
-- **效能監控**：檔案大小、載入時間、傳輸速度追蹤 
+### 🚀 技術架構優勢
+- **完全隔離**：每個分頁的檢測結果獨立儲存，互不影響
+- **自動清理**：分頁關閉時自動清理對應的檢測資料
+- **導航重置**：分頁導航到新網址時自動重置檢測資料
+- **記憶體管理**：定期清理過期分頁資料，避免記憶體洩漏
+- **錯誤隔離**：各功能模組完全獨立，互不影響 
