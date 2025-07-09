@@ -7,6 +7,8 @@ let tabDetectionData = {}; // 新增：按標籤頁分組的檢測資料
 
 // 新增：安全檢查器管理器
 let securityManager = null;
+let securityListener = null;
+let securityInitPromise; // Promise for security manager initialization
 
 // 新增：Manifest 攔截與解析系統
 let manifestMap = {}; // 儲存解析的 manifest 資料，按 tabId 分組
@@ -40,17 +42,15 @@ function logMessage(message, level = 'info') {
 // 新增：初始化安全檢查器管理器
 async function initializeSecurityManager() {
   try {
-    // 載入 SecurityManager 類別
-    const securityManagerUrl = chrome.runtime.getURL('src/core/security-manager.js');
-    const response = await fetch(securityManagerUrl);
-    const moduleCode = await response.text();
-    
-    // 使用 eval 載入模組（在擴展環境中是安全的）
-    eval(moduleCode);
+    // 使用 importScripts 載入模組（Service Worker 環境）
+    await loadSecurityManagerModule();
     
     // 創建 SecurityManager 實例
     if (typeof SecurityManager !== 'undefined') {
       securityManager = new SecurityManager();
+      logMessage('SecurityManager instance created. Waiting for initPromise...', 'info');
+      // 等待 SecurityManager 內部的初始化完成
+      await securityManager.initPromise;
       logMessage('SecurityManager initialized successfully', 'info');
       return true;
     } else {
@@ -58,9 +58,31 @@ async function initializeSecurityManager() {
     }
   } catch (error) {
     logMessage(`Failed to initialize SecurityManager: ${error.message}`, 'error');
-    return false;
+    // 拋出錯誤，讓 Promise 進入 rejected 狀態
+    throw error;
   }
 }
+
+// 載入 SecurityManager 模組（Service Worker 兼容版本）
+async function loadSecurityManagerModule() {
+  try {
+    // 載入所有必要的安全檢測模組
+    importScripts('src/detectors/security/SecurityDetectionModule.js');
+    importScripts('src/detectors/security/CSPDetector.js');
+    importScripts('src/detectors/security/FrameProtectionDetector.js');
+    importScripts('src/core/security-manager.js');
+    
+    logMessage('All security modules loaded via importScripts', 'info');
+  } catch (error) {
+    logMessage(`Security modules loading failed: ${error.message}`, 'error');
+    throw error;
+  }
+}
+
+// 在 Service Worker 啟動時立即初始化 SecurityManager，並保存其 Promise
+securityInitPromise = initializeSecurityManager().catch(err => {
+  logMessage(`Top-level securityInitPromise caught an error: ${err.message}`, 'error');
+});
 
 // 新增：獲取資源類型
 function getResourceType(url) {
@@ -1782,6 +1804,41 @@ function getCurrentTabInfo(callback) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   try {
     const tabId = sender.tab ? sender.tab.id : null;
+
+    // 安全檢測相關消息
+    if (message.type === 'GET_SECURITY_STATUS') {
+      securityInitPromise.then(() => {
+        if (securityManager) {
+          sendResponse({ success: true, status: securityManager.getStatus() });
+        } else {
+          sendResponse({ success: false, error: 'Security manager failed to initialize.' });
+        }
+      }).catch(error => {
+        sendResponse({ success: false, error: `Security manager initialization failed: ${error.message}` });
+      });
+      return true; // 異步響應
+    }
+
+    if (message.type === 'GET_SECURITY_DATA') {
+      getCurrentTabInfo(async (tab) => {
+        if (!tab) {
+          sendResponse({ success: false, error: 'No active tab found' });
+          return;
+        }
+        try {
+          await securityInitPromise; // 等待初始化
+          if (!securityManager) {
+            throw new Error('Security manager is not available after initialization.');
+          }
+          const data = await securityManager.getTabSecurityData(tab.id);
+          sendResponse({ success: true, data: data });
+        } catch (error) {
+          logMessage(`Error getting security data: ${error.message}`, 'error');
+          sendResponse({ success: false, error: error.message });
+        }
+      });
+      return true; // 異步響應
+    }
     
     // CDN 檢測相關消息
     if (message.type === 'ping' || message.type === 'PING') {
@@ -2255,11 +2312,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (async () => {
           try {
             if (!securityManager) {
-              sendResponse({ 
-                success: false, 
-                error: 'Security manager not initialized' 
-              });
-              return;
+              // 嘗試初始化 SecurityManager
+              const success = await initializeSecurityManager();
+              if (!success || !securityManager) {
+                sendResponse({ 
+                  success: false, 
+                  error: 'Security manager not available' 
+                });
+                return;
+              }
             }
             
             const tabId = message.tabId || (sender.tab ? sender.tab.id : null);
@@ -2288,15 +2349,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         
       case 'GET_SECURITY_STATUS':
         try {
-          const status = securityManager ? securityManager.getStatus() : { 
-            enabled: false, 
-            error: 'Security manager not initialized' 
-          };
-          sendResponse({
-            success: true,
-            status: status,
-            timestamp: Date.now()
-          });
+          if (securityManager) {
+            const status = securityManager.getStatus();
+            sendResponse({
+              success: true,
+              status: status,
+              timestamp: Date.now()
+            });
+          } else {
+            // SecurityManager 尚未初始化，嘗試重新初始化
+            initializeSecurityManager().then(success => {
+              const status = success && securityManager ? 
+                securityManager.getStatus() : 
+                { enabled: false, error: 'Security manager initialization failed' };
+              
+              sendResponse({
+                success: true,
+                status: status,
+                timestamp: Date.now()
+              });
+            }).catch(error => {
+              sendResponse({
+                success: true,
+                status: { enabled: false, error: `Security manager initialization error: ${error.message}` },
+                timestamp: Date.now()
+              });
+            });
+            return true; // 保持 sendResponse 活躍
+          }
         } catch (error) {
           sendResponse({ 
             success: false, 
@@ -2355,6 +2435,140 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         break;
         
+      case 'GET_ALL_SECURITY_DATA':
+        (async () => {
+          try {
+            if (!securityManager) {
+              sendResponse({ 
+                success: false, 
+                error: 'Security manager not available' 
+              });
+              return;
+            }
+            
+            const allData = await securityManager.getAllSecurityData();
+            sendResponse({
+              success: true,
+              data: allData,
+              timestamp: Date.now()
+            });
+          } catch (error) {
+            sendResponse({ 
+              success: false, 
+              error: error.message 
+            });
+          }
+        })();
+        return true;
+        
+      case 'CHECK_LISTENERS':
+        try {
+          const listenerStatus = {
+            securityListener: !!securityListener,
+            webRequestListener: !!webRequestListener,
+            beforeRequestListener: !!beforeRequestListener,
+            securityManagerAvailable: !!securityManager
+          };
+          
+          sendResponse({
+            success: true,
+            listeners: listenerStatus,
+            timestamp: Date.now()
+          });
+        } catch (error) {
+          sendResponse({ 
+            success: false, 
+            error: error.message 
+          });
+        }
+        break;
+        
+      case 'MANUAL_SECURITY_CHECK':
+        (async () => {
+          try {
+            if (!securityManager) {
+              sendResponse({ 
+                success: false, 
+                error: 'Security manager not available' 
+              });
+              return;
+            }
+            
+            const tabId = message.tabId;
+            const url = message.url;
+            
+            if (!tabId || !url) {
+              sendResponse({ 
+                success: false, 
+                error: 'Tab ID and URL are required' 
+              });
+              return;
+            }
+            
+            // Get current tab to get real response headers
+            const tab = await chrome.tabs.get(tabId);
+            if (!tab) {
+              sendResponse({ 
+                success: false, 
+                error: 'Tab not found' 
+              });
+              return;
+            }
+            
+            // Simulate manual security check by re-requesting data
+            const securityData = await securityManager.getTabSecurityData(tabId);
+            
+            sendResponse({
+              success: true,
+              result: securityData,
+              timestamp: Date.now()
+            });
+          } catch (error) {
+            sendResponse({ 
+              success: false, 
+              error: error.message 
+            });
+          }
+        })();
+        return true;
+        
+      case 'SIMULATE_SECURITY_REQUEST':
+        (async () => {
+          try {
+            if (!securityManager) {
+              sendResponse({ 
+                success: false, 
+                error: 'Security manager not available' 
+              });
+              return;
+            }
+            
+            const simulatedDetails = message.details;
+            if (!simulatedDetails) {
+              sendResponse({ 
+                success: false, 
+                error: 'Details object is required' 
+              });
+              return;
+            }
+            
+            // Manually trigger security check with simulated data
+            const result = await securityManager.handleSecurityCheck(simulatedDetails);
+            
+            sendResponse({
+              success: true,
+              result: result,
+              timestamp: Date.now()
+            });
+          } catch (error) {
+            sendResponse({ 
+              success: false, 
+              error: error.message 
+            });
+          }
+        })();
+        return true;
+        
       default:
         // 未知消息類型
         logMessage(`Unknown message type: ${message.type}`, 'warn');
@@ -2370,6 +2584,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false; // 對於同步處理的消息，不需要保持通道開放
 });
 
+// 新增：獨立的安全檢測監聽器
+function startSecurityListener() {
+  if (securityListener) {
+    logMessage('Security listener already active, skipping start', 'warn');
+    return;
+  }
+  
+  if (!securityManager) {
+    logMessage('SecurityManager not available, cannot start security listener', 'error');
+    return;
+  }
+  
+  logMessage('Starting independent security detection listener');
+  
+  securityListener = chrome.webRequest.onHeadersReceived.addListener(
+    function (details) {
+      try {
+        // 跳過 chrome-extension:// 和 data: URLs
+        if (details.url.startsWith('chrome-extension://') || details.url.startsWith('data:')) {
+          return;
+        }
+        
+        // 跳過無效的標籤頁 ID
+        if (details.tabId < 0) {
+          return;
+        }
+        
+        // 只處理主框架和子框架請求（包含安全標頭）
+        if (details.type === 'main_frame' || details.type === 'sub_frame') {
+          // 執行安全檢測（不阻塞）
+          if (securityManager) {
+            securityManager.handleSecurityCheck(details).catch(error => {
+              logMessage(`Security check failed: ${error.message}`, 'error');
+            });
+          }
+        }
+      } catch (error) {
+        logMessage(`Security listener error: ${error.message}`, 'error');
+      }
+    },
+    { urls: ['<all_urls>'] },
+    ['responseHeaders']
+  );
+  
+  logMessage('Security detection listener started successfully');
+}
+
+function stopSecurityListener() {
+  if (securityListener) {
+    chrome.webRequest.onHeadersReceived.removeListener(securityListener);
+    securityListener = null;
+    logMessage('Security detection listener stopped');
+  }
+}
+
 function startListening() {
   if (webRequestListener || beforeRequestListener) {
     logMessage('Listener already active, skipping start', 'warn');
@@ -2382,6 +2651,21 @@ function startListening() {
   initializeSecurityManager().then(success => {
     if (success) {
       logMessage('Security manager ready for operation', 'info');
+      // 在這裡啟動安全監聽器
+      if (!securityListener && securityManager) {
+        securityListener = (details) => {
+          // 非同步處理，不阻塞請求
+          securityManager.handleSecurityCheck(details).catch(err => {
+            logMessage(`Security check execution failed: ${err.message}`, 'error');
+          });
+        };
+        chrome.webRequest.onHeadersReceived.addListener(
+          securityListener,
+          { urls: ['<all_urls>'], types: ['main_frame', 'sub_frame'] },
+          ['responseHeaders']
+        );
+        logMessage('Security listener started for main_frame and sub_frame.');
+      }
     } else {
       logMessage('Security manager failed to initialize, continuing without security checks', 'warn');
     }
@@ -2464,13 +2748,6 @@ function startListening() {
           }
         }
         const cdnDetection = detectCDN(headers, url);
-        
-        // 新增：並行執行安全檢測（不阻塞 CDN 檢測）
-        if (securityManager) {
-          securityManager.handleSecurityCheck(details).catch(error => {
-            logMessage(`Security check failed: ${error.message}`, 'error');
-          });
-        }
         
         // 新增：收集 Content-Length
         const contentLengthHeader = headers.find(header => header.name.toLowerCase() === 'content-length');
@@ -2885,7 +3162,13 @@ function startListening() {
 }
 
 function stopListening() {
-  if (!webRequestListener && !beforeRequestListener) return;
+  if (!webRequestListener && !beforeRequestListener && !securityListener) return;
+
+  if (securityListener) {
+    chrome.webRequest.onHeadersReceived.removeListener(securityListener);
+    securityListener = null;
+    logMessage('Security listener stopped.');
+  }
 
   if (webRequestListener) {
     chrome.webRequest.onCompleted.removeListener(webRequestListener);
@@ -3578,6 +3861,19 @@ chrome.storage.local.get(['cdnDetectionEnabled'], (result) => {
   } else {
     logMessage('CDN detection disabled on startup', 'info');
   }
+});
+
+// 獨立初始化 SecurityManager（不依賴 CDN 檢測狀態）
+initializeSecurityManager().then(success => {
+  if (success) {
+    logMessage('SecurityManager initialized independently on startup', 'info');
+    // 啟動獨立的安全檢測監聽器
+    startSecurityListener();
+  } else {
+    logMessage('SecurityManager failed to initialize on startup', 'warn');
+  }
+}).catch(error => {
+  logMessage(`SecurityManager startup initialization error: ${error.message}`, 'error');
 });
 
 chrome.action.setIcon({ path: 'icon.png' });

@@ -1,3 +1,4 @@
+if (typeof SecurityDetectionModule === 'undefined') {
 /**
  * SecurityDetectionModule - 核心安全檢測模組
  * 
@@ -28,6 +29,46 @@ class SecurityDetectionModule {
     
     // 初始化檢測結果存儲
     this.detectionResults = new Map();
+    
+    // 初始化專門的檢測器
+    this.cspDetector = null;
+    this.frameProtectionDetector = null;
+    this.initializeCSPDetector();
+    this.initializeFrameProtectionDetector();
+  }
+
+  /**
+   * 初始化 CSP 檢測器
+   */
+  initializeCSPDetector() {
+    try {
+      // 檢查 CSPDetector 是否已載入（應該通過 importScripts 載入）
+      if (typeof CSPDetector !== 'undefined') {
+        this.cspDetector = new CSPDetector();
+        console.log('[SecurityDetectionModule] CSPDetector initialized from global scope');
+      } else {
+        console.warn('[SecurityDetectionModule] CSPDetector not available');
+      }
+    } catch (error) {
+      console.error('[SecurityDetectionModule] Failed to initialize CSPDetector:', error);
+    }
+  }
+
+  /**
+   * 初始化 Frame Protection 檢測器
+   */
+  initializeFrameProtectionDetector() {
+    try {
+      // 檢查 FrameProtectionDetector 是否已載入（應該通過 importScripts 載入）
+      if (typeof FrameProtectionDetector !== 'undefined') {
+        this.frameProtectionDetector = new FrameProtectionDetector();
+        console.log('[SecurityDetectionModule] FrameProtectionDetector initialized from global scope');
+      } else {
+        console.warn('[SecurityDetectionModule] FrameProtectionDetector not available');
+      }
+    } catch (error) {
+      console.error('[SecurityDetectionModule] Failed to initialize FrameProtectionDetector:', error);
+    }
   }
 
   /**
@@ -36,13 +77,18 @@ class SecurityDetectionModule {
    * @returns {Object|null} 檢測結果或 null（發生錯誤時）
    */
   detectSecurityHeaders(details) {
+    console.log(`[SecurityDetectionModule] Processing security headers for ${details.url} (Type: ${details.type}, Tab: ${details.tabId})`);
+    
     try {
       // 只處理主文檔請求
       if (details.type !== 'main_frame' && details.type !== 'sub_frame') {
+        console.log(`[SecurityDetectionModule] Skipping non-frame request type: ${details.type}`);
         return null;
       }
 
       const headers = this.parseHeaders(details.responseHeaders);
+      console.log(`[SecurityDetectionModule] Parsed ${headers.size} headers from response`);
+      
       const timestamp = new Date().toISOString();
       
       // 執行各項安全檢測
@@ -51,8 +97,8 @@ class SecurityDetectionModule {
         url: details.url,
         timestamp: timestamp,
         headers: {
-          csp: this.detectCSP(headers),
-          frameProtection: this.detectFrameProtection(headers),
+          csp: this.detectCSP(headers, details.url),
+          frameProtection: this.detectFrameProtection(headers, details.url),
           contentType: this.detectContentTypeOptions(headers),
           hsts: this.detectHSTS(headers),
           referrerPolicy: this.detectReferrerPolicy(headers),
@@ -70,8 +116,10 @@ class SecurityDetectionModule {
       detectionResult.recommendations = this.generateRecommendations(detectionResult.headers);
       
       // 存儲結果
+      console.log(`[SecurityDetectionModule] Storing detection result for tab ${details.tabId}, score: ${detectionResult.score}/100`);
       this.storeResult(details.tabId, detectionResult);
       
+      console.log(`[SecurityDetectionModule] Security detection completed for ${details.url}`);
       return detectionResult;
       
     } catch (error) {
@@ -106,57 +154,31 @@ class SecurityDetectionModule {
   /**
    * 檢測 Content-Security-Policy
    * @param {Map} headers
+   * @param {string} url - 請求 URL
    * @returns {Object} CSP 檢測結果
    */
-  detectCSP(headers) {
+  detectCSP(headers, url = '') {
     try {
-      const csp = headers.get('content-security-policy') || 
-                  headers.get('content-security-policy-report-only');
-      
-      if (!csp) {
+      // 使用專門的 CSP 檢測器（如果可用）
+      if (this.cspDetector) {
+        const result = this.cspDetector.detectCSP(headers, url);
+        
+        // 轉換為舊格式以保持兼容性
         return {
-          present: false,
-          score: 0,
-          details: 'No CSP header found'
+          present: result.present,
+          score: result.score,
+          level: result.level,
+          details: result.details || (result.analysis ? this.formatCSPAnalysis(result.analysis) : ''),
+          directives: result.directives ? result.directives.list : [],
+          issues: result.analysis ? result.analysis.issues : [],
+          raw: result.header ? result.header.value : '',
+          enhanced: true, // 標記為增強版檢測
+          fullResult: result // 保留完整結果
         };
       }
       
-      // 解析 CSP 指令
-      const directives = this.parseCSPDirectives(csp);
-      let score = 100;
-      const issues = [];
-      
-      // 檢查關鍵指令
-      if (!directives['default-src']) {
-        score -= 20;
-        issues.push('Missing default-src directive');
-      }
-      
-      // 檢查 unsafe-inline
-      if (this.containsUnsafeInline(directives)) {
-        score -= 30;
-        issues.push('Contains unsafe-inline');
-      }
-      
-      // 檢查 unsafe-eval
-      if (this.containsUnsafeEval(directives)) {
-        score -= 20;
-        issues.push('Contains unsafe-eval');
-      }
-      
-      // 檢查 frame-ancestors
-      if (!directives['frame-ancestors']) {
-        score -= 10;
-        issues.push('Missing frame-ancestors directive');
-      }
-      
-      return {
-        present: true,
-        score: Math.max(0, score),
-        directives: Object.keys(directives),
-        issues: issues,
-        raw: csp.substring(0, 200) + (csp.length > 200 ? '...' : '')
-      };
+      // 降級到基本 CSP 檢測
+      return this.detectCSPBasic(headers);
       
     } catch (error) {
       console.error('[SecurityDetectionModule] Error in detectCSP:', error);
@@ -165,48 +187,187 @@ class SecurityDetectionModule {
   }
 
   /**
+   * 基本 CSP 檢測（降級版本）
+   * @param {Map} headers
+   * @returns {Object}
+   */
+  detectCSPBasic(headers) {
+    const csp = headers.get('content-security-policy') || 
+                headers.get('content-security-policy-report-only');
+    
+    if (!csp) {
+      return {
+        present: false,
+        score: 0,
+        details: 'No CSP header found'
+      };
+    }
+    
+    // 解析 CSP 指令
+    const directives = this.parseCSPDirectives(csp);
+    let score = 100;
+    const issues = [];
+    
+    // 檢查關鍵指令
+    if (!directives['default-src']) {
+      score -= 20;
+      issues.push('Missing default-src directive');
+    }
+    
+    // 檢查 unsafe-inline
+    if (this.containsUnsafeInline(directives)) {
+      score -= 30;
+      issues.push('Contains unsafe-inline');
+    }
+    
+    // 檢查 unsafe-eval
+    if (this.containsUnsafeEval(directives)) {
+      score -= 20;
+      issues.push('Contains unsafe-eval');
+    }
+    
+    // 檢查 frame-ancestors
+    if (!directives['frame-ancestors']) {
+      score -= 10;
+      issues.push('Missing frame-ancestors directive');
+    }
+    
+    return {
+      present: true,
+      score: Math.max(0, score),
+      directives: Object.keys(directives),
+      issues: issues,
+      raw: csp.substring(0, 200) + (csp.length > 200 ? '...' : ''),
+      enhanced: false // 標記為基本檢測
+    };
+  }
+
+  /**
+   * 格式化 CSP 分析結果
+   * @param {Object} analysis
+   * @returns {string}
+   */
+  formatCSPAnalysis(analysis) {
+    const details = [];
+    
+    if (analysis.defaultSrc) {
+      details.push(`default-src: ${analysis.defaultSrc.present ? 'Present' : 'Missing'}`);
+    }
+    
+    if (analysis.scriptSrc) {
+      details.push(`script-src: ${analysis.scriptSrc.present ? 'Present' : 'Falls back to default-src'}`);
+    }
+    
+    if (analysis.issues.length > 0) {
+      details.push(`Issues: ${analysis.issues.length}`);
+    }
+    
+    return details.join(', ');
+  }
+
+  /**
    * 檢測 Frame Protection Headers
    * @param {Map} headers
+   * @param {string} url - 請求 URL
    * @returns {Object} Frame Protection 檢測結果
    */
-  detectFrameProtection(headers) {
+  detectFrameProtection(headers, url = '') {
     try {
-      const xFrameOptions = headers.get('x-frame-options');
-      const csp = headers.get('content-security-policy');
-      
-      let score = 0;
-      const details = {};
-      
-      // 檢查 X-Frame-Options
-      if (xFrameOptions) {
-        const value = xFrameOptions.toUpperCase();
-        details.xFrameOptions = value;
+      // 使用專門的 Frame Protection 檢測器（如果可用）
+      if (this.frameProtectionDetector) {
+        const result = this.frameProtectionDetector.detectFrameProtection(headers, url);
         
-        if (value === 'DENY') {
-          score = 100;
-        } else if (value === 'SAMEORIGIN') {
-          score = 80;
-        } else if (value.startsWith('ALLOW-FROM')) {
-          score = 60;
-        }
+        // 轉換為舊格式以保持兼容性
+        return {
+          present: result.present,
+          score: result.score,
+          level: result.level,
+          details: {
+            xFrameOptions: result.xFrameOptions?.value || null,
+            frameAncestors: result.frameAncestors?.present || false,
+            protection: result.protection,
+            analysis: result.analysis
+          },
+          issues: this.extractIssues(result),
+          enhanced: true, // 標記為增強版檢測
+          fullResult: result // 保留完整結果
+        };
       }
       
-      // 檢查 CSP frame-ancestors
-      if (csp && csp.includes('frame-ancestors')) {
-        details.frameAncestors = true;
-        score = Math.max(score, 90);
-      }
-      
-      return {
-        present: score > 0,
-        score: score,
-        details: details
-      };
+      // 降級到基本 Frame Protection 檢測
+      return this.detectFrameProtectionBasic(headers);
       
     } catch (error) {
       console.error('[SecurityDetectionModule] Error in detectFrameProtection:', error);
       return { present: false, score: 0, error: true };
     }
+  }
+
+  /**
+   * 基本 Frame Protection 檢測（降級版本）
+   * @param {Map} headers
+   * @returns {Object}
+   */
+  detectFrameProtectionBasic(headers) {
+    const xFrameOptions = headers.get('x-frame-options');
+    const csp = headers.get('content-security-policy');
+    
+    let score = 0;
+    const details = {};
+    
+    // 檢查 X-Frame-Options
+    if (xFrameOptions) {
+      const value = xFrameOptions.toUpperCase();
+      details.xFrameOptions = value;
+      
+      if (value === 'DENY') {
+        score = 100;
+      } else if (value === 'SAMEORIGIN') {
+        score = 80;
+      } else if (value.startsWith('ALLOW-FROM')) {
+        score = 60;
+      }
+    }
+    
+    // 檢查 CSP frame-ancestors
+    if (csp && csp.includes('frame-ancestors')) {
+      details.frameAncestors = true;
+      score = Math.max(score, 90);
+    }
+    
+    return {
+      present: score > 0,
+      score: score,
+      details: details,
+      enhanced: false // 標記為基本檢測
+    };
+  }
+
+  /**
+   * 從檢測結果中提取問題列表
+   * @param {Object} result
+   * @returns {Array}
+   */
+  extractIssues(result) {
+    const issues = [];
+    
+    if (result.xFrameOptions?.issues) {
+      issues.push(...result.xFrameOptions.issues);
+    }
+    
+    if (result.frameAncestors?.issues) {
+      issues.push(...result.frameAncestors.issues);
+    }
+    
+    if (result.analysis?.issues) {
+      issues.push(...result.analysis.issues);
+    }
+    
+    if (result.analysis?.conflicts) {
+      issues.push(...result.analysis.conflicts);
+    }
+    
+    return issues;
   }
 
   /**
@@ -692,12 +853,16 @@ class SecurityDetectionModule {
    * @param {Object} result
    */
   async storeResult(tabId, result) {
+    console.log(`[SecurityDetectionModule] Storing result for tab ${tabId}`);
+    
     try {
       const key = `${this.storagePrefix}tab_${tabId}`;
+      console.log(`[SecurityDetectionModule] Storage key: ${key}`);
       
       // 獲取現有資料
       const existing = await this.getStoredData(key);
       const history = existing?.history || [];
+      console.log(`[SecurityDetectionModule] Found ${history.length} existing history entries`);
       
       // 添加新結果到歷史
       history.push(result);
@@ -716,7 +881,9 @@ class SecurityDetectionModule {
         history: history
       };
       
+      console.log(`[SecurityDetectionModule] Storing data with ${history.length} history entries`);
       await chrome.storage.local.set({ [key]: dataToStore });
+      console.log(`[SecurityDetectionModule] Successfully stored result for tab ${tabId}`);
       
     } catch (error) {
       console.error('[SecurityDetectionModule] Error storing result:', error);
@@ -792,4 +959,10 @@ class SecurityDetectionModule {
 // 導出模組
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = SecurityDetectionModule;
+}
+
+// 為了在 Service Worker 中使用，將其附加到全域對象
+if (typeof self !== 'undefined') {
+  self.SecurityDetectionModule = SecurityDetectionModule;
+}
 }

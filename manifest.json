@@ -77,8 +77,20 @@
       "resources": [
         "src/core/security-manager.js",
         "src/detectors/security/SecurityDetectionModule.js",
+        "src/detectors/security/CSPDetector.js",
+        "src/detectors/security/FrameProtectionDetector.js",
         "test-security-basic.html",
-        "test-security-manager.js"
+        "test-security-manager.js",
+        "test-frame-protection.html",
+        "test-frame-protection.js",
+        "test-csp-detection.html",
+        "test-csp-detection.js",
+        "test-popup-security.html",
+        "test-security-fix.html",
+        "test-real-browsing.html",
+        "debug-security-detection.html",
+        "test-edu-tw-headers.html",
+        "popup.js"
       ],
       "matches": ["<all_urls>"]
     }

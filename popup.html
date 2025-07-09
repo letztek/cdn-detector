@@ -828,6 +828,194 @@
       border: 1px dashed var(--border-color);
     }
     
+    /* 安全檢測相關樣式 */
+    .security-score-overview {
+      background: white;
+      border-radius: var(--border-radius-lg);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-lg);
+      box-shadow: var(--shadow-md);
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+    
+    .security-score-overview:hover {
+      box-shadow: var(--shadow-lg);
+      border-color: var(--primary-color);
+    }
+    
+    .security-score-overview h3 {
+      color: var(--dark-color);
+      margin: 0 0 var(--spacing-md) 0;
+      font-size: clamp(14px, 3vw, 16px);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+    }
+    
+    .score-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .overall-score {
+      text-align: center;
+    }
+    
+    .score-circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto var(--spacing-sm) auto;
+      box-shadow: var(--shadow-md);
+    }
+    
+    .score-circle .score-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+      line-height: 1;
+    }
+    
+    .score-circle .score-label {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.8);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .score-level {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-color);
+    }
+    
+    .security-detection-result {
+      background: white;
+      border-radius: var(--border-radius-lg);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-lg);
+      box-shadow: var(--shadow-md);
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+    
+    .security-detection-result:hover {
+      box-shadow: var(--shadow-lg);
+      border-color: var(--primary-color);
+    }
+    
+    .security-detection-result h3 {
+      color: var(--dark-color);
+      margin: 0 0 var(--spacing-md) 0;
+      font-size: clamp(14px, 3vw, 16px);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+    }
+    
+    .security-header-item {
+      border-left: 4px solid var(--primary-color);
+      padding-left: var(--spacing-md);
+      background: var(--light-color);
+      padding: var(--spacing-sm) var(--spacing-md);
+      border-radius: var(--border-radius-sm);
+    }
+    
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      margin-bottom: var(--spacing-xs);
+    }
+    
+    .status-badge {
+      padding: var(--spacing-xs) var(--spacing-sm);
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .status-badge.present {
+      background: var(--success-color);
+      color: white;
+    }
+    
+    .status-badge.missing {
+      background: var(--danger-color);
+      color: white;
+    }
+    
+    .status-badge.partial {
+      background: var(--warning-color);
+      color: white;
+    }
+    
+    .score-badge {
+      padding: var(--spacing-xs) var(--spacing-sm);
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--info-color);
+      color: white;
+    }
+    
+    .score-badge.excellent {
+      background: var(--success-color);
+    }
+    
+    .score-badge.good {
+      background: var(--warning-color);
+    }
+    
+    .score-badge.poor {
+      background: var(--danger-color);
+    }
+    
+    .header-details {
+      margin-top: var(--spacing-sm);
+    }
+    
+    .header-value {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-color);
+      margin-bottom: var(--spacing-xs);
+      word-break: break-all;
+    }
+    
+    .header-analysis {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    
+    .no-security-data {
+      background: white;
+      border-radius: var(--border-radius-lg);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-lg);
+      box-shadow: var(--shadow-md);
+      text-align: center;
+    }
+    
+    .no-security-data .no-data {
+      border: 1px dashed var(--border-color);
+    }
+    
+    .no-security-data .no-data p {
+      margin: var(--spacing-sm) 0;
+      color: var(--text-muted);
+    }
+    
     /* 響應式佈局優化 */
     @media (max-width: 450px) {
       .info-grid {
@@ -837,6 +1025,15 @@
       
       .history-controls {
         justify-content: center;
+      }
+      
+      .score-circle {
+        width: 60px;
+        height: 60px;
+      }
+      
+      .score-circle .score-value {
+        font-size: 18px;
       }
     }
     
@@ -872,6 +1069,7 @@
   <!-- 標籤頁導航 -->
   <div class="tab-navigation">
     <button class="tab-button active" data-tab="cdn">CDN 檢測</button>
+    <button class="tab-button" data-tab="security">安全檢測</button>
     <button class="tab-button" data-tab="video">影片品質</button>
   </div>
   
@@ -938,6 +1136,98 @@
         <div class="speed-dot miss"></div>
         <span>MISS: <span id="missSpeed">0</span> MB/s</span>
         </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 安全檢測標籤頁內容 -->
+  <div id="security-tab" class="tab-content" style="display: none;">
+    <!-- 安全檢測狀態 -->
+    <div class="status-section">
+      <p><span class="status-indicator" id="securityStatusIndicator"></span>安全檢測：<span id="securityStatus">未啟用</span></p>
+      <p>最後更新：<span id="securityLastUpdate">N/A</span></p>
+    </div>
+    
+    <!-- 安全評分總覽 -->
+    <div class="security-score-overview" id="securityScoreOverview" style="display: none;">
+      <h3>🔒 安全評分總覽</h3>
+      <div class="score-container">
+        <div class="overall-score">
+          <div class="score-circle">
+            <div class="score-value" id="overallSecurityScore">N/A</div>
+            <div class="score-label">總分</div>
+          </div>
+          <div class="score-level" id="overallSecurityLevel">未檢測</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- CSP 檢測結果 -->
+    <div class="security-detection-result" id="cspDetectionResult" style="display: none;">
+      <h3>🛡️ CSP 檢測結果</h3>
+      <div class="security-header-item">
+        <div class="header-status">
+          <span class="status-badge" id="cspStatusBadge">未檢測</span>
+          <span class="score-badge" id="cspScoreBadge">N/A</span>
+        </div>
+        <div class="header-details">
+          <div class="header-value" id="cspValue">未檢測到 CSP 標頭</div>
+          <div class="header-analysis" id="cspAnalysis"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Frame Protection 檢測結果 -->
+    <div class="security-detection-result" id="frameProtectionResult" style="display: none;">
+      <h3>🛡️ Frame Protection 檢測結果</h3>
+      <div class="security-header-item">
+        <div class="header-status">
+          <span class="status-badge" id="frameProtectionStatusBadge">未檢測</span>
+          <span class="score-badge" id="frameProtectionScoreBadge">N/A</span>
+        </div>
+        <div class="header-details">
+          <div class="header-value" id="frameProtectionValue">未檢測到 Frame Protection 標頭</div>
+          <div class="header-analysis" id="frameProtectionAnalysis"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- HSTS 檢測結果 -->
+    <div class="security-detection-result" id="hstsResult" style="display: none;">
+      <h3>🔒 HSTS 檢測結果</h3>
+      <div class="security-header-item">
+        <div class="header-status">
+          <span class="status-badge" id="hstsStatusBadge">未檢測</span>
+          <span class="score-badge" id="hstsScoreBadge">N/A</span>
+        </div>
+        <div class="header-details">
+          <div class="header-value" id="hstsValue">未檢測到 HSTS 標頭</div>
+          <div class="header-analysis" id="hstsAnalysis"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Content-Type Options 檢測結果 -->
+    <div class="security-detection-result" id="contentTypeResult" style="display: none;">
+      <h3>🛡️ Content-Type Options 檢測結果</h3>
+      <div class="security-header-item">
+        <div class="header-status">
+          <span class="status-badge" id="contentTypeStatusBadge">未檢測</span>
+          <span class="score-badge" id="contentTypeScoreBadge">N/A</span>
+        </div>
+        <div class="header-details">
+          <div class="header-value" id="contentTypeValue">未檢測到 X-Content-Type-Options 標頭</div>
+          <div class="header-analysis" id="contentTypeAnalysis"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 未檢測到安全標頭的提示 -->
+    <div class="no-security-data" id="noSecurityData">
+      <div class="no-data">
+        <p>🔍 未檢測到安全標頭</p>
+        <p>請瀏覽網站後重新整理以查看安全檢測結果</p>
+        <button id="refreshSecurityData" class="action-btn primary">重新整理</button>
       </div>
     </div>
   </div>
@@ -1031,6 +1321,20 @@
           <div class="info-item" id="mpdStreamItem" style="display: none;">
             <span class="info-label">串流類型：</span>
             <span id="streamType">N/A</span>
+          </div>
+          <div class="info-item" id="drmDetailsItem" style="display: none;">
+            <span class="info-label">檢測來源：</span>
+            <span id="drmDetails">N/A</span>
+          </div>
+        </div>
+        
+        <!-- DRM 詳細統計 -->
+        <div id="drmStats" style="display: none; margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #17a2b8;">
+          <div style="font-size: 12px; color: #495057; margin-bottom: 5px;">
+            <strong>保護統計：</strong>
+          </div>
+          <div id="drmStatsContent" style="font-size: 11px; color: #6c757d;">
+            載入中...
           </div>
         </div>
       </div>

@@ -83,6 +83,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 啟用影片品質監控
     initializeVideoQuality();
     
+    // 啟用安全檢測監控
+    initializeSecurityDetection();
+    
     // 設置 QoE Dashboard 按鈕事件監聽器
     const qoeDashboardBtn = document.getElementById('openQoEDashboard');
     if (qoeDashboardBtn) {
@@ -109,6 +112,10 @@ document.addEventListener('DOMContentLoaded', () => {
           // 即時更新影片品質數據
           if (document.getElementById('videoStatusIndicator')?.classList.contains('active')) {
             refreshVideoQuality();
+          }
+          // 即時更新安全檢測數據
+          if (document.getElementById('securityStatusIndicator')) {
+            refreshSecurityData();
           }
         }, 1000); // 提高到每1秒刷新一次以實現即時顯示
         console.log('Popup visible, started auto-refresh');
@@ -1039,6 +1046,11 @@ function initializeTabs() {
       if (targetTab === 'video') {
         refreshVideoQuality();
       }
+      
+      // 當切換到安全檢測標籤時，刷新安全檢測數據
+      if (targetTab === 'security') {
+        refreshSecurityData();
+      }
     });
   });
 }
@@ -1619,10 +1631,10 @@ function updateDRMInfo(latestMetric) {
   const streamType = document.getElementById('streamType');
   const mpdStreamItem = document.getElementById('mpdStreamItem');
   
-  // 檢查是否有 DRM 資訊
+  // 檢查是否有 DRM 資訊 - 修復數據結構匹配問題
   const hasDRM = latestMetric && latestMetric.drmProtection;
   
-  if (!hasDRM || !latestMetric.drmProtection.isProtected) {
+  if (!hasDRM || !latestMetric.drmProtection.protected) {
     // 沒有 DRM 保護
     if (drmInfo) drmInfo.style.display = 'none';
     return;
@@ -1635,7 +1647,7 @@ function updateDRMInfo(latestMetric) {
   
   // 更新 DRM 狀態
   if (drmStatus) {
-    if (drmData.isProtected) {
+    if (drmData.protected) {
       drmStatus.textContent = '已加密';
       drmStatus.style.color = '#dc3545'; // 紅色表示加密
     } else {
@@ -1646,8 +1658,8 @@ function updateDRMInfo(latestMetric) {
   
   // 更新 DRM 系統列表
   if (drmSystems) {
-    if (drmData.systems && drmData.systems.length > 0) {
-      drmSystems.textContent = drmData.systems.join(', ');
+    if (drmData.drmSystems && drmData.drmSystems.length > 0) {
+      drmSystems.textContent = drmData.drmSystems.join(', ');
       drmSystems.style.color = '#17a2b8';
     } else {
       drmSystems.textContent = '未知';
@@ -1655,26 +1667,671 @@ function updateDRMInfo(latestMetric) {
     }
   }
   
-  // 更新金鑰系統
+  // 更新金鑰系統信息
   if (keySystem && keySystemItem) {
-    if (drmData.keySystem) {
+    const systemDetails = drmData.details && drmData.details.drmSystemDetails;
+    if (systemDetails && Object.keys(systemDetails).length > 0) {
       keySystemItem.style.display = 'block';
-      keySystem.textContent = drmData.keySystem;
+      const systemInfo = Object.entries(systemDetails).map(([system, details]) => {
+        if (details && details.uuid) {
+          return `${system} (${details.uuid})`;
+        }
+        return system;
+      }).join(', ');
+      keySystem.textContent = systemInfo;
       keySystem.style.color = '#ffc107';
     } else {
       keySystemItem.style.display = 'none';
     }
   }
   
-  // 更新串流類型
+  // 更新串流類型 - 根據檢測結果顯示
   if (streamType && mpdStreamItem) {
-    if (drmData.mpdInfo && drmData.mpdInfo.detected) {
+    const details = drmData.details;
+    if (details && (details.manifestDRM || details.segmentDRM)) {
       mpdStreamItem.style.display = 'block';
-      streamType.textContent = 'MPEG-DASH (MPD)';
+      
+      let streamTypeText = '';
+      if (details.manifestDRM && details.segmentDRM) {
+        streamTypeText = 'MPEG-DASH (Manifest + Segments)';
+      } else if (details.manifestDRM) {
+        streamTypeText = 'MPEG-DASH (Manifest)';
+      } else if (details.segmentDRM) {
+        streamTypeText = 'Media Segments';
+      }
+      
+      streamType.textContent = streamTypeText;
       streamType.style.color = '#28a745';
-      streamType.title = drmData.mpdInfo.url || 'MPD 串流';
+      
+      // 添加更多詳細信息到 title
+      let titleInfo = streamTypeText;
+      if (details.protectedSegments > 0) {
+        titleInfo += `\n保護段: ${details.protectedSegments}/${details.totalSegments}`;
+        if (details.protectedSegmentRatio > 0) {
+          titleInfo += ` (${Math.round(details.protectedSegmentRatio * 100)}%)`;
+        }
+      }
+      streamType.title = titleInfo;
     } else {
       mpdStreamItem.style.display = 'none';
     }
   }
+  
+  // 更新 DRM 檢測來源詳細信息
+  const drmDetailsElement = document.getElementById('drmDetails');
+  const drmDetailsItem = document.getElementById('drmDetailsItem');
+  if (drmDetailsElement && drmDetailsItem) {
+    const details = drmData.details;
+    if (details && (details.manifestDRM || details.segmentDRM)) {
+      drmDetailsItem.style.display = 'block';
+      
+      let detailsText = [];
+      if (details.manifestDRM) {
+        detailsText.push('Manifest');
+      }
+      if (details.segmentDRM) {
+        detailsText.push('Media Segments');
+      }
+      
+      drmDetailsElement.textContent = detailsText.join(' + ');
+      drmDetailsElement.style.color = '#17a2b8';
+    } else {
+      drmDetailsItem.style.display = 'none';
+    }
+  }
+  
+  // 更新 DRM 統計信息
+  const drmStats = document.getElementById('drmStats');
+  const drmStatsContent = document.getElementById('drmStatsContent');
+  if (drmStats && drmStatsContent) {
+    const details = drmData.details;
+    if (details && (details.totalSegments > 0 || details.protectedSegments > 0)) {
+      drmStats.style.display = 'block';
+      
+      let statsInfo = [];
+      if (details.totalSegments > 0) {
+        statsInfo.push(`總段數: ${details.totalSegments}`);
+      }
+      if (details.protectedSegments > 0) {
+        statsInfo.push(`保護段: ${details.protectedSegments}`);
+      }
+      if (details.protectedSegmentRatio > 0) {
+        statsInfo.push(`保護比例: ${Math.round(details.protectedSegmentRatio * 100)}%`);
+      }
+      
+      // 顯示 DRM 系統的詳細資訊
+      if (details.drmSystemDetails && Object.keys(details.drmSystemDetails).length > 0) {
+        const systemCount = Object.keys(details.drmSystemDetails).length;
+        statsInfo.push(`DRM 系統: ${systemCount} 個`);
+      }
+      
+      drmStatsContent.textContent = statsInfo.join(' • ');
+    } else {
+      drmStats.style.display = 'none';
+    }
+  }
+}
+
+// =============================================================================
+// 安全檢測功能
+// =============================================================================
+
+function initializeSecurityDetection() {
+  console.log('Initializing security detection...');
+  
+  // 綁定重新整理按鈕事件
+  const refreshSecurityDataBtn = document.getElementById('refreshSecurityData');
+  if (refreshSecurityDataBtn) {
+    refreshSecurityDataBtn.addEventListener('click', refreshSecurityData);
+  }
+  
+  // 初始載入安全檢測數據
+  refreshSecurityData();
+}
+
+async function refreshSecurityData() {
+  console.log('Refreshing security data...');
+  
+  try {
+    // 檢查 SecurityManager 狀態
+    const statusResponse = await sendMessageToBackground({ type: 'GET_SECURITY_STATUS' });
+    
+    if (statusResponse && statusResponse.success) {
+      updateSecurityStatus(statusResponse.status);
+      
+      // 如果 SecurityManager 可用，獲取當前標籤頁的安全數據
+      const dataResponse = await sendMessageToBackground({ type: 'GET_SECURITY_DATA' });
+      
+      if (dataResponse && dataResponse.success) {
+        updateSecurityResults(dataResponse.data);
+      } else {
+        console.warn('No security data available:', dataResponse?.error);
+        showNoSecurityData();
+      }
+    } else {
+      console.warn('Security manager not available:', statusResponse?.error);
+      updateSecurityStatus({ enabled: false, error: statusResponse?.error });
+      showNoSecurityData();
+    }
+  } catch (error) {
+    console.error('Failed to refresh security data:', error);
+    updateSecurityStatus({ enabled: false, error: error.message });
+    showNoSecurityData();
+  }
+}
+
+function updateSecurityStatus(status) {
+  const securityStatusIndicator = document.getElementById('securityStatusIndicator');
+  const securityStatus = document.getElementById('securityStatus');
+  const securityLastUpdate = document.getElementById('securityLastUpdate');
+  
+  if (securityStatusIndicator && securityStatus) {
+    if (status.enabled) {
+      securityStatusIndicator.className = 'status-indicator active';
+      securityStatus.textContent = '已啟用';
+      securityStatus.style.color = '#28a745';
+    } else {
+      securityStatusIndicator.className = 'status-indicator inactive';
+      securityStatus.textContent = status.error || '未啟用';
+      securityStatus.style.color = '#dc3545';
+    }
+  }
+  
+  if (securityLastUpdate) {
+    securityLastUpdate.textContent = new Date().toLocaleTimeString();
+  }
+}
+
+function updateSecurityResults(securityData) {
+  console.log('Updating security results with data:', securityData);
+  
+  if (!securityData) {
+    showNoSecurityData();
+    return;
+  }
+  
+  // 處理數據結構：如果有 history 陣列，使用最新的檢測結果
+  let latestData = securityData;
+  if (securityData.history && securityData.history.length > 0) {
+    latestData = securityData.history[securityData.history.length - 1];
+  }
+  
+  if (!latestData || !latestData.headers) {
+    showNoSecurityData();
+    return;
+  }
+  
+  // 隱藏無數據提示
+  const noSecurityData = document.getElementById('noSecurityData');
+  if (noSecurityData) {
+    noSecurityData.style.display = 'none';
+  }
+  
+  // 更新 CSP 檢測結果
+  if (latestData.headers.csp) {
+    updateCSPResults(latestData.headers.csp);
+  }
+  
+  // 更新 Frame Protection 檢測結果
+  if (latestData.headers.frameProtection) {
+    updateFrameProtectionResults(latestData.headers.frameProtection);
+  }
+  
+  // 更新其他安全標頭檢測結果
+  updateOtherSecurityHeaders(latestData.headers);
+  
+  // 使用實際的分數和等級，如果可用的話
+  const scoreData = {
+    score: securityData.currentScore || latestData.score,
+    level: securityData.currentLevel || latestData.level,
+    headers: latestData.headers
+  };
+  
+  // 計算並更新總評分
+  updateOverallSecurityScore(scoreData);
+}
+
+function updateCSPResults(cspData) {
+  const cspDetectionResult = document.getElementById('cspDetectionResult');
+  const cspStatusBadge = document.getElementById('cspStatusBadge');
+  const cspScoreBadge = document.getElementById('cspScoreBadge');
+  const cspValue = document.getElementById('cspValue');
+  const cspAnalysis = document.getElementById('cspAnalysis');
+  
+  if (!cspDetectionResult) return;
+  
+  // 顯示 CSP 檢測結果區域
+  cspDetectionResult.style.display = 'block';
+  
+  // 更新狀態徽章
+  if (cspStatusBadge) {
+    if (cspData.present) {
+      cspStatusBadge.textContent = '已檢測';
+      cspStatusBadge.className = 'status-badge present';
+    } else {
+      cspStatusBadge.textContent = '未檢測';
+      cspStatusBadge.className = 'status-badge missing';
+    }
+  }
+  
+  // 更新評分徽章
+  if (cspScoreBadge && cspData.score !== undefined) {
+    cspScoreBadge.textContent = `${cspData.score}/100`;
+    
+    if (cspData.score >= 80) {
+      cspScoreBadge.className = 'score-badge excellent';
+    } else if (cspData.score >= 60) {
+      cspScoreBadge.className = 'score-badge good';
+    } else {
+      cspScoreBadge.className = 'score-badge poor';
+    }
+  }
+  
+  // 更新 CSP 值顯示
+  if (cspValue) {
+    if (cspData.present && cspData.enhanced && cspData.fullResult) {
+      const result = cspData.fullResult;
+      if (result.rawHeader) {
+        cspValue.textContent = result.rawHeader.substring(0, 100) + (result.rawHeader.length > 100 ? '...' : '');
+      } else {
+        cspValue.textContent = '檢測到 CSP 標頭';
+      }
+    } else if (cspData.present) {
+      cspValue.textContent = '檢測到基本 CSP 標頭';
+    } else {
+      cspValue.textContent = '未檢測到 CSP 標頭';
+    }
+  }
+  
+  // 更新分析資訊
+  if (cspAnalysis) {
+    if (cspData.enhanced && cspData.fullResult) {
+      const result = cspData.fullResult;
+      let analysisText = [];
+      
+      if (result.keyDirectives) {
+        analysisText.push(`關鍵指令: ${Object.keys(result.keyDirectives).join(', ')}`);
+      }
+      
+      if (result.level) {
+        analysisText.push(`安全級別: ${result.level}`);
+      }
+      
+      if (result.issues && result.issues.length > 0) {
+        analysisText.push(`發現 ${result.issues.length} 個潛在問題`);
+      }
+      
+      cspAnalysis.textContent = analysisText.join(' | ') || '分析完成';
+    } else if (cspData.present) {
+      cspAnalysis.textContent = '基本 CSP 檢測完成';
+    } else {
+      cspAnalysis.textContent = '建議添加 CSP 標頭以提高安全性';
+    }
+  }
+}
+
+function updateFrameProtectionResults(frameData) {
+  const frameProtectionResult = document.getElementById('frameProtectionResult');
+  const frameProtectionStatusBadge = document.getElementById('frameProtectionStatusBadge');
+  const frameProtectionScoreBadge = document.getElementById('frameProtectionScoreBadge');
+  const frameProtectionValue = document.getElementById('frameProtectionValue');
+  const frameProtectionAnalysis = document.getElementById('frameProtectionAnalysis');
+  
+  if (!frameProtectionResult) return;
+  
+  // 顯示 Frame Protection 檢測結果區域
+  frameProtectionResult.style.display = 'block';
+  
+  // 更新狀態徽章
+  if (frameProtectionStatusBadge) {
+    if (frameData.present) {
+      frameProtectionStatusBadge.textContent = '已檢測';
+      frameProtectionStatusBadge.className = 'status-badge present';
+    } else {
+      frameProtectionStatusBadge.textContent = '未檢測';
+      frameProtectionStatusBadge.className = 'status-badge missing';
+    }
+  }
+  
+  // 更新評分徽章
+  if (frameProtectionScoreBadge && frameData.score !== undefined) {
+    frameProtectionScoreBadge.textContent = `${frameData.score}/100`;
+    
+    if (frameData.score >= 80) {
+      frameProtectionScoreBadge.className = 'score-badge excellent';
+    } else if (frameData.score >= 60) {
+      frameProtectionScoreBadge.className = 'score-badge good';
+    } else {
+      frameProtectionScoreBadge.className = 'score-badge poor';
+    }
+  }
+  
+  // 更新值顯示
+  if (frameProtectionValue) {
+    if (frameData.enhanced && frameData.fullResult) {
+      const result = frameData.fullResult;
+      let valueText = [];
+      
+      if (result.xFrameOptions && result.xFrameOptions.present) {
+        valueText.push(`X-Frame-Options: ${result.xFrameOptions.value}`);
+      }
+      
+      if (result.frameAncestors && result.frameAncestors.present) {
+        valueText.push(`CSP frame-ancestors: ${result.frameAncestors.value}`);
+      }
+      
+      frameProtectionValue.textContent = valueText.join(' | ') || '檢測到 Frame Protection';
+    } else if (frameData.present) {
+      frameProtectionValue.textContent = '檢測到基本 Frame Protection';
+    } else {
+      frameProtectionValue.textContent = '未檢測到 Frame Protection 標頭';
+    }
+  }
+  
+  // 更新分析資訊
+  if (frameProtectionAnalysis) {
+    if (frameData.enhanced && frameData.fullResult) {
+      const result = frameData.fullResult;
+      let analysisText = [];
+      
+      if (result.analysis) {
+        analysisText.push(`保護級別: ${result.analysis.overallProtection}`);
+        
+        if (result.analysis.hasConflict) {
+          analysisText.push('檢測到設定衝突');
+        }
+      }
+      
+      frameProtectionAnalysis.textContent = analysisText.join(' | ') || 'Frame Protection 分析完成';
+    } else if (frameData.present) {
+      frameProtectionAnalysis.textContent = '基本 Frame Protection 檢測完成';
+    } else {
+      frameProtectionAnalysis.textContent = '建議添加 X-Frame-Options 或 CSP frame-ancestors 以防止點擊劫持';
+    }
+  }
+}
+
+function updateOtherSecurityHeaders(headers) {
+  // 更新 HSTS 檢測結果
+  if (headers.hsts) {
+    updateHSTSResults(headers.hsts);
+  }
+  
+  // 更新 Content-Type Options 檢測結果
+  if (headers.contentType) {
+    updateContentTypeResults(headers.contentType);
+  }
+  
+  // 記錄其他安全標頭供調試使用
+  console.log('Other security headers:', {
+    hsts: headers.hsts,
+    contentType: headers.contentType,
+    referrerPolicy: headers.referrerPolicy,
+    cookies: headers.cookies
+  });
+}
+
+function updateHSTSResults(hstsData) {
+  const hstsResult = document.getElementById('hstsResult');
+  const hstsStatusBadge = document.getElementById('hstsStatusBadge');
+  const hstsScoreBadge = document.getElementById('hstsScoreBadge');
+  const hstsValue = document.getElementById('hstsValue');
+  const hstsAnalysis = document.getElementById('hstsAnalysis');
+  
+  if (!hstsResult) return;
+  
+  // 顯示 HSTS 檢測結果區域
+  hstsResult.style.display = 'block';
+  
+  // 更新狀態徽章
+  if (hstsStatusBadge) {
+    if (hstsData.present) {
+      hstsStatusBadge.textContent = '已檢測';
+      hstsStatusBadge.className = 'status-badge present';
+    } else {
+      hstsStatusBadge.textContent = '未檢測';
+      hstsStatusBadge.className = 'status-badge missing';
+    }
+  }
+  
+  // 更新評分徽章
+  if (hstsScoreBadge && hstsData.score !== undefined) {
+    hstsScoreBadge.textContent = `${hstsData.score}/100`;
+    
+    if (hstsData.score >= 80) {
+      hstsScoreBadge.className = 'score-badge excellent';
+    } else if (hstsData.score >= 60) {
+      hstsScoreBadge.className = 'score-badge good';
+    } else {
+      hstsScoreBadge.className = 'score-badge poor';
+    }
+  }
+  
+  // 更新 HSTS 值顯示
+  if (hstsValue) {
+    if (hstsData.present && hstsData.raw) {
+      hstsValue.textContent = hstsData.raw.substring(0, 100) + (hstsData.raw.length > 100 ? '...' : '');
+    } else if (hstsData.present) {
+      hstsValue.textContent = '檢測到 HSTS 標頭';
+    } else {
+      hstsValue.textContent = '未檢測到 HSTS 標頭';
+    }
+  }
+  
+  // 更新分析資訊
+  if (hstsAnalysis) {
+    if (hstsData.present && hstsData.details) {
+      let analysisText = [];
+      
+      if (hstsData.details.maxAge) {
+        const days = Math.floor(hstsData.details.maxAge / 86400);
+        analysisText.push(`有效期: ${days} 天`);
+      }
+      
+      if (hstsData.details.includeSubDomains) {
+        analysisText.push('包含子域名');
+      }
+      
+      if (hstsData.details.preload) {
+        analysisText.push('支持預載入');
+      }
+      
+      hstsAnalysis.textContent = analysisText.join(' | ') || 'HSTS 配置基本';
+    } else if (hstsData.present) {
+      hstsAnalysis.textContent = '基本 HSTS 配置';
+    } else {
+      hstsAnalysis.textContent = '建議啟用 HSTS 以強制 HTTPS 連接';
+    }
+  }
+}
+
+function updateContentTypeResults(contentTypeData) {
+  const contentTypeResult = document.getElementById('contentTypeResult');
+  const contentTypeStatusBadge = document.getElementById('contentTypeStatusBadge');
+  const contentTypeScoreBadge = document.getElementById('contentTypeScoreBadge');
+  const contentTypeValue = document.getElementById('contentTypeValue');
+  const contentTypeAnalysis = document.getElementById('contentTypeAnalysis');
+  
+  if (!contentTypeResult) return;
+  
+  // 顯示 Content-Type Options 檢測結果區域
+  contentTypeResult.style.display = 'block';
+  
+  // 更新狀態徽章
+  if (contentTypeStatusBadge) {
+    if (contentTypeData.present) {
+      contentTypeStatusBadge.textContent = '已檢測';
+      contentTypeStatusBadge.className = 'status-badge present';
+    } else {
+      contentTypeStatusBadge.textContent = '未檢測';
+      contentTypeStatusBadge.className = 'status-badge missing';
+    }
+  }
+  
+  // 更新評分徽章
+  if (contentTypeScoreBadge && contentTypeData.score !== undefined) {
+    contentTypeScoreBadge.textContent = `${contentTypeData.score}/100`;
+    
+    if (contentTypeData.score >= 80) {
+      contentTypeScoreBadge.className = 'score-badge excellent';
+    } else if (contentTypeData.score >= 60) {
+      contentTypeScoreBadge.className = 'score-badge good';
+    } else {
+      contentTypeScoreBadge.className = 'score-badge poor';
+    }
+  }
+  
+  // 更新 Content-Type Options 值顯示
+  if (contentTypeValue) {
+    if (contentTypeData.present && contentTypeData.value) {
+      contentTypeValue.textContent = `X-Content-Type-Options: ${contentTypeData.value}`;
+    } else if (contentTypeData.present) {
+      contentTypeValue.textContent = '檢測到 X-Content-Type-Options 標頭';
+    } else {
+      contentTypeValue.textContent = '未檢測到 X-Content-Type-Options 標頭';
+    }
+  }
+  
+  // 更新分析資訊
+  if (contentTypeAnalysis) {
+    if (contentTypeData.present && contentTypeData.correct) {
+      contentTypeAnalysis.textContent = '正確配置，可防止 MIME 類型嗅探攻擊';
+    } else if (contentTypeData.present) {
+      contentTypeAnalysis.textContent = '檢測到標頭，但可能配置不正確';
+    } else {
+      contentTypeAnalysis.textContent = '建議添加 X-Content-Type-Options: nosniff 標頭';
+    }
+  }
+}
+
+function updateOverallSecurityScore(securityData) {
+  const securityScoreOverview = document.getElementById('securityScoreOverview');
+  const overallSecurityScore = document.getElementById('overallSecurityScore');
+  const overallSecurityLevel = document.getElementById('overallSecurityLevel');
+  
+  if (!securityScoreOverview) return;
+  
+  // 檢查是否有任何安全檢測結果
+  const hasSecurityData = securityData.headers && 
+    (securityData.headers.csp || securityData.headers.frameProtection || 
+     securityData.headers.hsts || securityData.headers.contentType);
+  
+  if (!hasSecurityData) {
+    securityScoreOverview.style.display = 'none';
+    return;
+  }
+  
+  // 顯示安全評分總覽
+  securityScoreOverview.style.display = 'block';
+  
+  // 如果已經有計算好的總分，直接使用
+  if (securityData.score !== undefined) {
+    if (overallSecurityScore) {
+      overallSecurityScore.textContent = securityData.score;
+    }
+    
+    if (overallSecurityLevel) {
+      let level = securityData.level || '未知';
+      
+      // 將英文等級轉換為中文
+      const levelMap = {
+        'excellent': '優秀',
+        'good': '良好',
+        'fair': '普通',
+        'poor': '需改善',
+        'critical': '危險'
+      };
+      
+      level = levelMap[level] || level;
+      overallSecurityLevel.textContent = level;
+    }
+    return;
+  }
+  
+  // 如果沒有總分，計算平均分數
+  let totalScore = 0;
+  let scoreCount = 0;
+  
+  if (securityData.headers.csp && securityData.headers.csp.score !== undefined) {
+    totalScore += securityData.headers.csp.score;
+    scoreCount++;
+  }
+  
+  if (securityData.headers.frameProtection && securityData.headers.frameProtection.score !== undefined) {
+    totalScore += securityData.headers.frameProtection.score;
+    scoreCount++;
+  }
+  
+  if (securityData.headers.hsts && securityData.headers.hsts.score !== undefined) {
+    totalScore += securityData.headers.hsts.score;
+    scoreCount++;
+  }
+  
+  if (securityData.headers.contentType && securityData.headers.contentType.score !== undefined) {
+    totalScore += securityData.headers.contentType.score;
+    scoreCount++;
+  }
+  
+  if (scoreCount > 0) {
+    const averageScore = Math.round(totalScore / scoreCount);
+    
+    if (overallSecurityScore) {
+      overallSecurityScore.textContent = averageScore;
+    }
+    
+    if (overallSecurityLevel) {
+      let level = '';
+      if (averageScore >= 90) {
+        level = '優秀';
+      } else if (averageScore >= 70) {
+        level = '良好';
+      } else if (averageScore >= 50) {
+        level = '普通';
+      } else if (averageScore >= 30) {
+        level = '需改善';
+      } else {
+        level = '危險';
+      }
+      overallSecurityLevel.textContent = level;
+    }
+  }
+}
+
+function showNoSecurityData() {
+  // 隱藏所有檢測結果區域
+  const cspDetectionResult = document.getElementById('cspDetectionResult');
+  const frameProtectionResult = document.getElementById('frameProtectionResult');
+  const hstsResult = document.getElementById('hstsResult');
+  const contentTypeResult = document.getElementById('contentTypeResult');
+  const securityScoreOverview = document.getElementById('securityScoreOverview');
+  const noSecurityData = document.getElementById('noSecurityData');
+  
+  if (cspDetectionResult) cspDetectionResult.style.display = 'none';
+  if (frameProtectionResult) frameProtectionResult.style.display = 'none';
+  if (hstsResult) hstsResult.style.display = 'none';
+  if (contentTypeResult) contentTypeResult.style.display = 'none';
+  if (securityScoreOverview) securityScoreOverview.style.display = 'none';
+  
+  // 顯示無數據提示
+  if (noSecurityData) {
+    noSecurityData.style.display = 'block';
+  }
+}
+
+// 輔助函數：發送消息給背景腳本
+function sendMessageToBackground(message) {
+  return new Promise((resolve, reject) => {
+    if (!chrome.runtime) {
+      reject(new Error('Chrome runtime not available'));
+      return;
+    }
+    
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
 }
