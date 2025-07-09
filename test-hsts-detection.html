@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSTS 檢測測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #666;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+        }
+        .test-button {
+            background: #007cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #005a8b;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        .info {
+            background: #cce8ff;
+            border-color: #b8daff;
+            color: #004085;
+        }
+        .test-case {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007cba;
+        }
+        .score-display {
+            font-size: 18px;
+            font-weight: bold;
+            color: #28a745;
+            margin: 10px 0;
+        }
+        .directive-info {
+            margin: 5px 0;
+            padding: 5px;
+            background: #e9ecef;
+            border-radius: 3px;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .table th, .table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .table th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 HSTS 檢測測試</h1>
+        
+        <div class="test-section">
+            <h2>1. 基本功能測試</h2>
+            <button class="test-button" onclick="testHSTSDetector()">測試 HSTSDetector</button>
+            <button class="test-button" onclick="testSecurityIntegration()">測試安全檢測整合</button>
+            <div id="basicTestResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>2. Header 解析測試</h2>
+            <button class="test-button" onclick="testPerfectHSTS()">測試完整 HSTS</button>
+            <button class="test-button" onclick="testBasicHSTS()">測試基本 HSTS</button>
+            <button class="test-button" onclick="testMissingHSTS()">測試缺少 HSTS</button>
+            <button class="test-button" onclick="testInvalidHSTS()">測試無效 HSTS</button>
+            <div id="headerTestResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>3. 指令分析測試</h2>
+            <button class="test-button" onclick="testMaxAgeAnalysis()">測試 max-age 分析</button>
+            <button class="test-button" onclick="testDirectiveAnalysis()">測試指令分析</button>
+            <button class="test-button" onclick="testStrengthCalculation()">測試強度計算</button>
+            <div id="directiveTestResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>4. 評分系統測試</h2>
+            <button class="test-button" onclick="testScoring()">測試評分系統</button>
+            <button class="test-button" onclick="testLevelCalculation()">測試等級計算</button>
+            <button class="test-button" onclick="testRecommendations()">測試建議系統</button>
+            <div id="scoringTestResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>5. 實際網站測試</h2>
+            <button class="test-button" onclick="testCurrentPageHSTS()">檢測當前頁面</button>
+            <button class="test-button" onclick="testExtensionStatus()">檢查擴展狀態</button>
+            <div id="realTestResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>6. 測試結果統計</h2>
+            <div id="testStats" class="info result">
+                <strong>測試統計：</strong><br>
+                - 已執行測試：<span id="testsRun">0</span><br>
+                - 成功測試：<span id="testsPass">0</span><br>
+                - 失敗測試：<span id="testsFail">0</span><br>
+                - 成功率：<span id="successRate">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="test-hsts-detection.js"></script>
+</body>
+</html>

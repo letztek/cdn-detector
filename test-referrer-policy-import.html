@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Referrer Policy Import Test</title>
+</head>
+<body>
+    <h1>Referrer Policy Import Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        // 模擬 importScripts 行為來測試重複載入
+        console.log('Testing ReferrerPolicyDetector import...');
+        
+        // 第一次載入
+        try {
+            const script1 = document.createElement('script');
+            script1.src = 'src/detectors/security/ReferrerPolicyDetector.js';
+            script1.onload = function() {
+                console.log('First load successful');
+                
+                // 第二次載入 - 應該不會出錯
+                const script2 = document.createElement('script');
+                script2.src = 'src/detectors/security/ReferrerPolicyDetector.js';
+                script2.onload = function() {
+                    console.log('Second load successful - no duplicate declaration error');
+                    
+                    // 測試檢測器是否正常工作
+                    if (typeof ReferrerPolicyDetector !== 'undefined') {
+                        const detector = new ReferrerPolicyDetector();
+                        const result = detector.detect({'referrer-policy': 'no-referrer'}, 'https://example.com');
+                        
+                        document.getElementById('results').innerHTML = `
+                            <h3>✅ Test Results:</h3>
+                            <p>✅ No duplicate declaration error</p>
+                            <p>✅ ReferrerPolicyDetector is available</p>
+                            <p>✅ Detection works: Score = ${result.score}, Level = ${result.level}</p>
+                        `;
+                    } else {
+                        document.getElementById('results').innerHTML = `
+                            <h3>❌ Test Results:</h3>
+                            <p>❌ ReferrerPolicyDetector not available</p>
+                        `;
+                    }
+                };
+                script2.onerror = function() {
+                    console.error('Second load failed');
+                    document.getElementById('results').innerHTML = `
+                        <h3>❌ Test Results:</h3>
+                        <p>❌ Second load failed</p>
+                    `;
+                };
+                document.head.appendChild(script2);
+            };
+            script1.onerror = function() {
+                console.error('First load failed');
+                document.getElementById('results').innerHTML = `
+                    <h3>❌ Test Results:</h3>
+                    <p>❌ First load failed</p>
+                `;
+            };
+            document.head.appendChild(script1);
+        } catch (error) {
+            console.error('Test failed:', error);
+            document.getElementById('results').innerHTML = `
+                <h3>❌ Test Results:</h3>
+                <p>❌ Test failed: ${error.message}</p>
+            `;
+        }
+    </script>
+</body>
+</html>

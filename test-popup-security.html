@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>安全檢測 Popup 測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .warning {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        #testResults {
+            margin-top: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #666;
+            margin-top: 30px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔒 安全檢測 Popup 測試</h1>
+        
+        <div class="test-section">
+            <h2>背景腳本通信測試</h2>
+            <button class="test-button" id="testBackgroundConnection">測試背景腳本連接</button>
+            <button class="test-button" id="testSecurityStatus">測試安全狀態獲取</button>
+            <button class="test-button" id="testSecurityData">測試安全數據獲取</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>Popup 函數測試</h2>
+            <button class="test-button" id="testPopupFunctions">測試 Popup 函數</button>
+            <button class="test-button" id="testCSPUpdate">測試 CSP 結果更新</button>
+            <button class="test-button" id="testFrameProtectionUpdate">測試 Frame Protection 結果更新</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>UI 元素測試</h2>
+            <button class="test-button" id="testUIElements">測試 UI 元素存在</button>
+            <button class="test-button" id="testTabSwitching">測試標籤切換</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>完整功能測試</h2>
+            <button class="test-button" id="testFullIntegration">完整整合測試</button>
+        </div>
+        
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        let testResults = document.getElementById('testResults');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `test-result ${type}`;
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            testResults.appendChild(logEntry);
+            console.log(`[${timestamp}] ${message}`);
+        }
+        
+        function clearResults() {
+            testResults.innerHTML = '';
+        }
+        
+        // 測試背景腳本連接
+        document.getElementById('testBackgroundConnection').addEventListener('click', async () => {
+            clearResults();
+            log('開始測試背景腳本連接...', 'info');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'ping' });
+                log('背景腳本連接成功', 'success');
+            } catch (error) {
+                log(`背景腳本連接失敗: ${error.message}`, 'error');
+            }
+        });
+        
+        // 測試安全狀態獲取
+        document.getElementById('testSecurityStatus').addEventListener('click', async () => {
+            clearResults();
+            log('開始測試安全狀態獲取...', 'info');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_STATUS' });
+                if (response && response.success) {
+                    log('安全狀態獲取成功', 'success');
+                    log(`狀態: ${JSON.stringify(response.status, null, 2)}`, 'info');
+                } else {
+                    log(`安全狀態獲取失敗: ${response?.error || '未知錯誤'}`, 'error');
+                }
+            } catch (error) {
+                log(`安全狀態獲取錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 測試安全數據獲取
+        document.getElementById('testSecurityData').addEventListener('click', async () => {
+            clearResults();
+            log('開始測試安全數據獲取...', 'info');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_DATA' });
+                if (response && response.success) {
+                    log('安全數據獲取成功', 'success');
+                    log(`數據: ${JSON.stringify(response.data, null, 2)}`, 'info');
+                } else {
+                    log(`安全數據獲取失敗: ${response?.error || '未知錯誤'}`, 'warning');
+                }
+            } catch (error) {
+                log(`安全數據獲取錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 測試 Popup 函數
+        document.getElementById('testPopupFunctions').addEventListener('click', async () => {
+            clearResults();
+            log('開始測試 Popup 函數...', 'info');
+            
+            try {
+                // 載入 popup.js
+                const script = document.createElement('script');
+                script.src = chrome.runtime.getURL('popup.js');
+                document.head.appendChild(script);
+                
+                // 等待腳本載入
+                await new Promise(resolve => {
+                    script.onload = resolve;
+                });
+                
+                // 測試函數是否存在
+                const functionsToTest = [
+                    'initializeSecurityDetection',
+                    'refreshSecurityData',
+                    'updateSecurityStatus',
+                    'updateSecurityResults',
+                    'updateCSPResults',
+                    'updateFrameProtectionResults',
+                    'updateOverallSecurityScore',
+                    'showNoSecurityData'
+                ];
+                
+                let foundFunctions = 0;
+                functionsToTest.forEach(funcName => {
+                    if (typeof window[funcName] === 'function') {
+                        foundFunctions++;
+                        log(`✓ 函數 ${funcName} 存在`, 'success');
+                    } else {
+                        log(`✗ 函數 ${funcName} 不存在`, 'error');
+                    }
+                });
+                
+                log(`找到 ${foundFunctions}/${functionsToTest.length} 個函數`, 'info');
+                
+            } catch (error) {
+                log(`Popup 函數測試失敗: ${error.message}`, 'error');
+            }
+        });
+        
+        // 測試 CSP 結果更新
+        document.getElementById('testCSPUpdate').addEventListener('click', () => {
+            clearResults();
+            log('開始測試 CSP 結果更新...', 'info');
+            
+            // 模擬 CSP 檢測資料
+            const mockCSPData = {
+                present: true,
+                enhanced: true,
+                score: 75,
+                level: 'good',
+                fullResult: {
+                    rawHeader: "default-src 'self'; script-src 'self' 'unsafe-inline';",
+                    keyDirectives: {
+                        'default-src': "'self'",
+                        'script-src': "'self' 'unsafe-inline'"
+                    },
+                    issues: ['unsafe-inline in script-src']
+                }
+            };
+            
+            try {
+                if (typeof window.updateCSPResults === 'function') {
+                    window.updateCSPResults(mockCSPData);
+                    log('CSP 結果更新成功', 'success');
+                } else {
+                    log('updateCSPResults 函數不存在', 'error');
+                }
+            } catch (error) {
+                log(`CSP 結果更新失敗: ${error.message}`, 'error');
+            }
+        });
+        
+        // 測試 Frame Protection 結果更新
+        document.getElementById('testFrameProtectionUpdate').addEventListener('click', () => {
+            clearResults();
+            log('開始測試 Frame Protection 結果更新...', 'info');
+            
+            // 模擬 Frame Protection 檢測資料
+            const mockFrameData = {
+                present: true,
+                enhanced: true,
+                score: 85,
+                level: 'good',
+                fullResult: {
+                    xFrameOptions: {
+                        present: true,
+                        value: 'DENY'
+                    },
+                    frameAncestors: {
+                        present: true,
+                        value: "'none'"
+                    },
+                    analysis: {
+                        overallProtection: 'comprehensive',
+                        hasConflict: false
+                    }
+                }
+            };
+            
+            try {
+                if (typeof window.updateFrameProtectionResults === 'function') {
+                    window.updateFrameProtectionResults(mockFrameData);
+                    log('Frame Protection 結果更新成功', 'success');
+                } else {
+                    log('updateFrameProtectionResults 函數不存在', 'error');
+                }
+            } catch (error) {
+                log(`Frame Protection 結果更新失敗: ${error.message}`, 'error');
+            }
+        });
+        
+        // 測試 UI 元素存在
+        document.getElementById('testUIElements').addEventListener('click', () => {
+            clearResults();
+            log('開始測試 UI 元素存在...', 'info');
+            
+            const elementsToTest = [
+                'securityStatusIndicator',
+                'securityStatus',
+                'securityLastUpdate',
+                'securityScoreOverview',
+                'overallSecurityScore',
+                'overallSecurityLevel',
+                'cspDetectionResult',
+                'cspStatusBadge',
+                'cspScoreBadge',
+                'cspValue',
+                'cspAnalysis',
+                'frameProtectionResult',
+                'frameProtectionStatusBadge',
+                'frameProtectionScoreBadge',
+                'frameProtectionValue',
+                'frameProtectionAnalysis',
+                'noSecurityData'
+            ];
+            
+            let foundElements = 0;
+            elementsToTest.forEach(elementId => {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    foundElements++;
+                    log(`✓ 元素 ${elementId} 存在`, 'success');
+                } else {
+                    log(`✗ 元素 ${elementId} 不存在`, 'warning');
+                }
+            });
+            
+            log(`找到 ${foundElements}/${elementsToTest.length} 個 UI 元素`, 'info');
+        });
+        
+        // 測試標籤切換
+        document.getElementById('testTabSwitching').addEventListener('click', () => {
+            clearResults();
+            log('開始測試標籤切換...', 'info');
+            
+            try {
+                // 檢查安全標籤按鈕
+                const securityTabButton = document.querySelector('[data-tab="security"]');
+                if (securityTabButton) {
+                    log('✓ 安全標籤按鈕存在', 'success');
+                    
+                    // 模擬點擊
+                    securityTabButton.click();
+                    
+                    // 檢查標籤內容
+                    const securityTabContent = document.getElementById('security-tab');
+                    if (securityTabContent) {
+                        log('✓ 安全標籤內容存在', 'success');
+                    } else {
+                        log('✗ 安全標籤內容不存在', 'error');
+                    }
+                } else {
+                    log('✗ 安全標籤按鈕不存在', 'error');
+                }
+            } catch (error) {
+                log(`標籤切換測試失敗: ${error.message}`, 'error');
+            }
+        });
+        
+        // 完整整合測試
+        document.getElementById('testFullIntegration').addEventListener('click', async () => {
+            clearResults();
+            log('開始完整整合測試...', 'info');
+            
+            try {
+                // 1. 測試背景腳本連接
+                log('1. 測試背景腳本連接...', 'info');
+                const pingResponse = await chrome.runtime.sendMessage({ type: 'ping' });
+                log('背景腳本連接成功', 'success');
+                
+                // 2. 測試安全狀態
+                log('2. 測試安全狀態...', 'info');
+                const statusResponse = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_STATUS' });
+                if (statusResponse && statusResponse.success) {
+                    log('安全狀態獲取成功', 'success');
+                } else {
+                    log('安全狀態獲取失敗', 'warning');
+                }
+                
+                // 3. 測試安全數據
+                log('3. 測試安全數據...', 'info');
+                const dataResponse = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_DATA' });
+                if (dataResponse && dataResponse.success) {
+                    log('安全數據獲取成功', 'success');
+                } else {
+                    log('安全數據獲取失敗 (預期行為)', 'warning');
+                }
+                
+                log('完整整合測試完成', 'success');
+                
+            } catch (error) {
+                log(`完整整合測試失敗: ${error.message}`, 'error');
+            }
+        });
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            log('安全檢測 Popup 測試頁面已載入', 'info');
+        });
+    </script>
+</body>
+</html>

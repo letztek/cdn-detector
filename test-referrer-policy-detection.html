@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Referrer Policy Detection 測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background-color: #fafafa;
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+        .test-case {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
+        }
+        .test-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .result-pass {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .result-fail {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .result-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .stat-item {
+            padding: 15px;
+            background: #ecf0f1;
+            border-radius: 6px;
+            flex: 1;
+            margin: 0 10px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .stat-label {
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        .policy-info {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .policy-item {
+            margin: 10px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            border-left: 3px solid #27ae60;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 Referrer Policy Detection 測試工具</h1>
+        
+        <div class="policy-info">
+            <h3>🎯 測試目標</h3>
+            <p>測試 ReferrerPolicyDetector 的 Referrer-Policy header 檢測功能，包括：</p>
+            <div class="policy-item">• 檢測 Referrer-Policy header 是否存在</div>
+            <div class="policy-item">• 解析不同的策略值和配置</div>
+            <div class="policy-item">• 評估隱私保護等級</div>
+            <div class="policy-item">• 提供安全評分和建議</div>
+            <div class="policy-item">• 測試多重策略和語法驗證</div>
+        </div>
+
+        <div class="controls">
+            <button onclick="runAllTests()" id="runTestsBtn">開始測試</button>
+            <button onclick="clearResults()" id="clearBtn">清除結果</button>
+            <button onclick="exportResults()" id="exportBtn" disabled>匯出結果</button>
+        </div>
+
+        <div class="stats" id="statsContainer" style="display: none;">
+            <div class="stat-item">
+                <div class="stat-number" id="totalTests">0</div>
+                <div class="stat-label">總測試數</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="passedTests">0</div>
+                <div class="stat-label">通過測試</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="failedTests">0</div>
+                <div class="stat-label">失敗測試</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="successRate">0%</div>
+                <div class="stat-label">成功率</div>
+            </div>
+        </div>
+
+        <!-- 基本檢測測試 -->
+        <div class="test-section">
+            <div class="test-title">📋 基本 Header 檢測測試</div>
+            
+            <div class="test-case">
+                <strong>測試 1.1：檢測缺少 Referrer-Policy header</strong>
+                <div class="test-result" id="test1_1">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 1.2：檢測 no-referrer 策略</strong>
+                <div class="test-result" id="test1_2">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 1.3：檢測 strict-origin-when-cross-origin 策略</strong>
+                <div class="test-result" id="test1_3">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 1.4：檢測 unsafe-url 策略</strong>
+                <div class="test-result" id="test1_4">等待測試...</div>
+            </div>
+        </div>
+
+        <!-- 策略解析測試 -->
+        <div class="test-section">
+            <div class="test-title">🔍 策略解析測試</div>
+            
+            <div class="test-case">
+                <strong>測試 2.1：解析多重策略值</strong>
+                <div class="test-result" id="test2_1">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 2.2：解析無效策略值</strong>
+                <div class="test-result" id="test2_2">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 2.3：解析混合有效與無效策略</strong>
+                <div class="test-result" id="test2_3">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 2.4：解析空白和格式化問題</strong>
+                <div class="test-result" id="test2_4">等待測試...</div>
+            </div>
+        </div>
+
+        <!-- 安全評分測試 -->
+        <div class="test-section">
+            <div class="test-title">📊 安全評分測試</div>
+            
+            <div class="test-case">
+                <strong>測試 3.1：no-referrer 高分策略評分</strong>
+                <div class="test-result" id="test3_1">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 3.2：same-origin 高分策略評分</strong>
+                <div class="test-result" id="test3_2">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 3.3：moderate 等級策略評分</strong>
+                <div class="test-result" id="test3_3">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 3.4：低分策略評分驗證</strong>
+                <div class="test-result" id="test3_4">等待測試...</div>
+            </div>
+        </div>
+
+        <!-- 隱私保護等級測試 -->
+        <div class="test-section">
+            <div class="test-title">🛡️ 隱私保護等級測試</div>
+            
+            <div class="test-case">
+                <strong>測試 4.1：maximum 隱私等級檢測</strong>
+                <div class="test-result" id="test4_1">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 4.2：moderate 隱私等級檢測</strong>
+                <div class="test-result" id="test4_2">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 4.3：low 隱私等級檢測</strong>
+                <div class="test-result" id="test4_3">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 4.4：very-low 隱私等級檢測</strong>
+                <div class="test-result" id="test4_4">等待測試...</div>
+            </div>
+        </div>
+
+        <!-- 建議和問題檢測測試 -->
+        <div class="test-section">
+            <div class="test-title">💡 建議和問題檢測測試</div>
+            
+            <div class="test-case">
+                <strong>測試 5.1：缺失 header 建議生成</strong>
+                <div class="test-result" id="test5_1">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 5.2：弱策略警告生成</strong>
+                <div class="test-result" id="test5_2">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 5.3：相容性警告檢測</strong>
+                <div class="test-result" id="test5_3">等待測試...</div>
+            </div>
+            
+            <div class="test-case">
+                <strong>測試 5.4：最佳實踐建議</strong>
+                <div class="test-result" id="test5_4">等待測試...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="test-referrer-policy-detection.js"></script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>安全檢測整合測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .status {
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.loading {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 安全檢測整合測試</h1>
+        
+        <div class="test-section">
+            <h2>1. 擴充功能狀態檢查</h2>
+            <div id="extensionStatus" class="status loading">正在檢查擴充功能狀態...</div>
+            <button onclick="checkExtensionStatus()">重新檢查</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>2. 安全管理器狀態</h2>
+            <div id="securityManagerStatus" class="status loading">正在檢查安全管理器...</div>
+            <button onclick="checkSecurityManager()">檢查安全管理器</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>3. 測試網站安全檢測</h2>
+            <div id="testSiteStatus" class="status loading">準備測試...</div>
+            <button onclick="testSecurityDetection()">測試安全檢測</button>
+            <div id="testSiteResults" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>4. 測試結果整合</h2>
+            <div id="integrationStatus" class="status loading">等待測試...</div>
+            <button onclick="testUIIntegration()">測試 UI 整合</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>5. 調試資訊</h2>
+            <button onclick="showDebugInfo()">顯示調試資訊</button>
+            <div id="debugInfo" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // 檢查擴充功能狀態
+        function checkExtensionStatus() {
+            const statusDiv = document.getElementById('extensionStatus');
+            
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                statusDiv.className = 'status success';
+                statusDiv.textContent = '✅ 擴充功能已正確載入 (ID: ' + chrome.runtime.id + ')';
+                checkSecurityManager();
+            } else {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 擴充功能未載入或無權限';
+            }
+        }
+        
+        // 檢查安全管理器狀態
+        function checkSecurityManager() {
+            const statusDiv = document.getElementById('securityManagerStatus');
+            
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ Chrome API 不可用';
+                return;
+            }
+            
+            statusDiv.className = 'status loading';
+            statusDiv.textContent = '🔄 正在檢查安全管理器...';
+            
+            chrome.runtime.sendMessage({ type: 'GET_SECURITY_STATUS' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ 無法與背景腳本通信: ' + chrome.runtime.lastError.message;
+                    return;
+                }
+                
+                if (response && response.success) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = '✅ 安全管理器已啟用並正常運行';
+                    
+                    // 如果狀態檢查成功，自動測試安全檢測
+                    setTimeout(() => {
+                        testSecurityDetection();
+                    }, 1000);
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ 安全管理器未啟用或出錯: ' + (response?.error || '未知錯誤');
+                }
+            });
+        }
+        
+        // 測試安全檢測
+        function testSecurityDetection() {
+            const statusDiv = document.getElementById('testSiteStatus');
+            const resultsDiv = document.getElementById('testSiteResults');
+            
+            statusDiv.className = 'status loading';
+            statusDiv.textContent = '🔄 正在測試安全檢測...';
+            
+            chrome.runtime.sendMessage({ type: 'GET_SECURITY_DATA' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ 通信錯誤: ' + chrome.runtime.lastError.message;
+                    return;
+                }
+                
+                if (response && response.success && response.data) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = '✅ 安全檢測資料獲取成功';
+                    
+                    resultsDiv.style.display = 'block';
+                    resultsDiv.textContent = JSON.stringify(response.data, null, 2);
+                    
+                    // 自動測試 UI 整合
+                    setTimeout(() => {
+                        testUIIntegration();
+                    }, 500);
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ 無安全檢測資料: ' + (response?.error || '未知錯誤');
+                    resultsDiv.style.display = 'none';
+                }
+            });
+        }
+        
+        // 測試 UI 整合
+        function testUIIntegration() {
+            const statusDiv = document.getElementById('integrationStatus');
+            
+            // 模擬檢查彈窗中的安全檢測顯示
+            statusDiv.className = 'status loading';
+            statusDiv.textContent = '🔄 檢查 UI 整合狀態...';
+            
+            // 檢查是否有安全檢測相關的 DOM 元素
+            chrome.runtime.sendMessage({ type: 'ping' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ 後台腳本未響應';
+                    return;
+                }
+                
+                statusDiv.className = 'status success';
+                statusDiv.textContent = '✅ UI 整合測試完成，請開啟擴充功能彈窗檢查安全檢測頁面';
+            });
+        }
+        
+        // 顯示調試資訊
+        function showDebugInfo() {
+            const debugDiv = document.getElementById('debugInfo');
+            
+            const debugInfo = {
+                userAgent: navigator.userAgent,
+                location: window.location.href,
+                chromeRuntime: typeof chrome !== 'undefined' && chrome.runtime ? chrome.runtime.id : 'N/A',
+                timestamp: new Date().toISOString(),
+                extensionVersion: '2.3.0',
+                testEnvironment: 'Integration Test Page'
+            };
+            
+            debugDiv.style.display = 'block';
+            debugDiv.textContent = JSON.stringify(debugInfo, null, 2);
+        }
+        
+        // 頁面載入完成後自動開始測試
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('安全檢測整合測試頁面已載入');
+            
+            // 延遲 1 秒後開始測試，確保擴充功能已完全載入
+            setTimeout(() => {
+                checkExtensionStatus();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

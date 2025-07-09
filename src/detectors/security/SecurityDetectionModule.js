@@ -33,8 +33,14 @@ class SecurityDetectionModule {
     // 初始化專門的檢測器
     this.cspDetector = null;
     this.frameProtectionDetector = null;
+    this.contentTypeDetector = null;
+    this.hstsDetector = null;
+    this.referrerPolicyDetector = null;
     this.initializeCSPDetector();
     this.initializeFrameProtectionDetector();
+    this.initializeContentTypeDetector();
+    this.initializeHSTSDetector();
+    this.initializeReferrerPolicyDetector();
   }
 
   /**
@@ -72,6 +78,60 @@ class SecurityDetectionModule {
   }
 
   /**
+   * 初始化 Content-Type Options 檢測器
+   */
+  initializeContentTypeDetector() {
+    try {
+      if (typeof ContentTypeDetector !== 'undefined') {
+        this.contentTypeDetector = new ContentTypeDetector();
+        console.log('[SecurityDetectionModule] ContentTypeDetector initialized');
+      } else {
+        console.warn('[SecurityDetectionModule] ContentTypeDetector not available, using fallback');
+        this.contentTypeDetector = null;
+      }
+    } catch (error) {
+      console.error('[SecurityDetectionModule] Failed to initialize ContentTypeDetector:', error);
+      this.contentTypeDetector = null;
+    }
+  }
+
+  /**
+   * 初始化 HSTS 檢測器
+   */
+  initializeHSTSDetector() {
+    try {
+      if (typeof HSTSDetector !== 'undefined') {
+        this.hstsDetector = new HSTSDetector();
+        console.log('[SecurityDetectionModule] HSTSDetector initialized');
+      } else {
+        console.warn('[SecurityDetectionModule] HSTSDetector not available, using fallback');
+        this.hstsDetector = null;
+      }
+    } catch (error) {
+      console.error('[SecurityDetectionModule] Failed to initialize HSTSDetector:', error);
+      this.hstsDetector = null;
+    }
+  }
+
+  /**
+   * 初始化 Referrer Policy 檢測器
+   */
+  initializeReferrerPolicyDetector() {
+    try {
+      if (typeof ReferrerPolicyDetector !== 'undefined') {
+        this.referrerPolicyDetector = new ReferrerPolicyDetector();
+        console.log('[SecurityDetectionModule] ReferrerPolicyDetector initialized');
+      } else {
+        console.warn('[SecurityDetectionModule] ReferrerPolicyDetector not available, using fallback');
+        this.referrerPolicyDetector = null;
+      }
+    } catch (error) {
+      console.error('[SecurityDetectionModule] Failed to initialize ReferrerPolicyDetector:', error);
+      this.referrerPolicyDetector = null;
+    }
+  }
+
+  /**
    * 檢測安全 Headers - 主入口函數
    * @param {Object} details - Chrome webRequest 的 details 物件
    * @returns {Object|null} 檢測結果或 null（發生錯誤時）
@@ -99,9 +159,9 @@ class SecurityDetectionModule {
         headers: {
           csp: this.detectCSP(headers, details.url),
           frameProtection: this.detectFrameProtection(headers, details.url),
-          contentType: this.detectContentTypeOptions(headers),
-          hsts: this.detectHSTS(headers),
-          referrerPolicy: this.detectReferrerPolicy(headers),
+          contentType: this.detectContentTypeOptions(headers, details.url),
+          hsts: this.detectHSTS(headers, details.url),
+          referrerPolicy: this.detectReferrerPolicy(headers, details.url),
           permissionsPolicy: this.detectPermissionsPolicy(headers),
           cookies: this.detectCookieSecurity(headers)
         },
@@ -375,15 +435,43 @@ class SecurityDetectionModule {
    * @param {Map} headers
    * @returns {Object} Content Type Options 檢測結果
    */
-  detectContentTypeOptions(headers) {
+  detectContentTypeOptions(headers, url) {
     try {
+      // 優先使用專門的 ContentTypeDetector
+      if (this.contentTypeDetector) {
+        const headersArray = Array.from(headers.entries()).map(([name, value]) => ({ name, value }));
+        const result = this.contentTypeDetector.detect(headersArray, url);
+        
+        // 轉換為 SecurityDetectionModule 期望的格式
+        return {
+          present: result.detected,
+          score: result.score,
+          value: result.details.headerValue,
+          correct: result.details.hasNosniff,
+          protection: result.details.protection,
+          issues: result.issues,
+          analysis: result.analysis,
+          level: result.level,
+          details: result.details,
+          timestamp: result.timestamp
+        };
+      }
+      
+      // 降級到基本檢測
       const contentTypeOptions = headers.get('x-content-type-options');
       
       if (!contentTypeOptions) {
         return {
           present: false,
           score: 0,
-          details: 'Header not present'
+          details: 'Header not present',
+          protection: 'none',
+          issues: [{
+            type: 'missing_header',
+            message: '缺少 X-Content-Type-Options header',
+            severity: 'high'
+          }],
+          analysis: '缺少 X-Content-Type-Options header，容易受到 MIME 類型嗅探攻擊'
         };
       }
       
@@ -393,12 +481,32 @@ class SecurityDetectionModule {
         present: true,
         score: value === 'nosniff' ? 100 : 50,
         value: value,
-        correct: value === 'nosniff'
+        correct: value === 'nosniff',
+        protection: value === 'nosniff' ? 'full' : 'partial',
+        issues: value !== 'nosniff' ? [{
+          type: 'invalid_value',
+          message: `無效的 X-Content-Type-Options 值: ${value}`,
+          severity: 'medium'
+        }] : [],
+        analysis: value === 'nosniff' ? 
+          '✓ 已正確設定 nosniff 指令，可防止 MIME 類型嗅探攻擊' : 
+          '⚠ X-Content-Type-Options header 值無效或不完整'
       };
       
     } catch (error) {
       console.error('[SecurityDetectionModule] Error in detectContentTypeOptions:', error);
-      return { present: false, score: 0, error: true };
+      return { 
+        present: false, 
+        score: 0, 
+        error: true,
+        protection: 'unknown',
+        issues: [{
+          type: 'detection_error',
+          message: `檢測失敗: ${error.message}`,
+          severity: 'critical'
+        }],
+        analysis: `檢測過程中發生錯誤: ${error.message}`
+      };
     }
   }
 
@@ -407,20 +515,53 @@ class SecurityDetectionModule {
    * @param {Map} headers
    * @returns {Object} HSTS 檢測結果
    */
-  detectHSTS(headers) {
+  detectHSTS(headers, url) {
     try {
+      // 優先使用專門的 HSTSDetector
+      if (this.hstsDetector) {
+        const headersArray = Array.from(headers.entries()).map(([name, value]) => ({ name, value }));
+        const result = this.hstsDetector.detect(headersArray, url);
+        
+        // 轉換為 SecurityDetectionModule 期望的格式
+        return {
+          present: result.detected,
+          score: result.score,
+          level: result.level,
+          directives: result.directives,
+          details: result.details,
+          issues: result.issues,
+          analysis: result.analysis,
+          recommendations: result.recommendations,
+          strength: result.details.strength,
+          maxAge: result.directives.maxAge,
+          includeSubDomains: result.directives.includeSubDomains,
+          preload: result.directives.preload,
+          raw: result.details.headerValue,
+          timestamp: result.timestamp
+        };
+      }
+      
+      // 降級到基本檢測
       const hsts = headers.get('strict-transport-security');
       
       if (!hsts) {
         return {
           present: false,
           score: 0,
-          details: 'HSTS not enabled'
+          details: 'HSTS not enabled',
+          issues: [{
+            type: 'missing_header',
+            message: '缺少 Strict-Transport-Security header',
+            severity: 'high'
+          }],
+          analysis: '缺少 HSTS header，無法強制 HTTPS 連接',
+          recommendations: ['添加 Strict-Transport-Security header']
         };
       }
       
       let score = 50; // 基礎分數
       const details = {};
+      const issues = [];
       
       // 解析 max-age
       const maxAgeMatch = hsts.match(/max-age=(\d+)/i);
@@ -435,78 +576,171 @@ class SecurityDetectionModule {
           score += 20;
         } else if (maxAge >= 86400) { // 1 天
           score += 10;
+        } else {
+          issues.push({
+            type: 'short_max_age',
+            message: `max-age 值過短: ${maxAge} 秒`,
+            severity: 'medium'
+          });
         }
+      } else {
+        issues.push({
+          type: 'invalid_max_age',
+          message: 'max-age 指令缺失或無效',
+          severity: 'high'
+        });
       }
       
       // 檢查 includeSubDomains
       if (/includeSubDomains/i.test(hsts)) {
         score += 10;
         details.includeSubDomains = true;
+      } else {
+        issues.push({
+          type: 'missing_include_subdomains',
+          message: '缺少 includeSubDomains 指令',
+          severity: 'low'
+        });
       }
       
       // 檢查 preload
       if (/preload/i.test(hsts)) {
         score += 10;
         details.preload = true;
+      } else {
+        issues.push({
+          type: 'missing_preload',
+          message: '缺少 preload 指令',
+          severity: 'low'
+        });
       }
+      
+      const finalScore = Math.min(100, score);
       
       return {
         present: true,
-        score: Math.min(100, score),
+        score: finalScore,
+        level: finalScore >= 80 ? 'good' : finalScore >= 60 ? 'average' : 'poor',
         details: details,
+        issues: issues,
+        analysis: `HSTS 配置檢測完成，評分: ${finalScore}/100`,
+        recommendations: issues.length > 0 ? ['改善 HSTS 配置'] : ['HSTS 配置良好'],
         raw: hsts
       };
       
     } catch (error) {
       console.error('[SecurityDetectionModule] Error in detectHSTS:', error);
-      return { present: false, score: 0, error: true };
+      return { 
+        present: false, 
+        score: 0, 
+        error: true,
+        issues: [{
+          type: 'detection_error',
+          message: `檢測失敗: ${error.message}`,
+          severity: 'critical'
+        }],
+        analysis: `檢測過程中發生錯誤: ${error.message}`
+      };
     }
   }
 
   /**
    * 檢測 Referrer-Policy
-   * @param {Map} headers
+   * @param {Map} headers - Headers Map
+   * @param {string} url - 檢測的 URL
    * @returns {Object} Referrer Policy 檢測結果
    */
-  detectReferrerPolicy(headers) {
+  detectReferrerPolicy(headers, url) {
     try {
+      console.log('[SecurityDetectionModule] Detecting Referrer-Policy header...');
+      
+      // 使用專門的檢測器（如果可用）
+      if (this.referrerPolicyDetector) {
+        // 轉換 Map 回普通物件供檢測器使用
+        const headersObj = {};
+        headers.forEach((value, key) => {
+          headersObj[key] = value;
+        });
+        
+        const result = this.referrerPolicyDetector.detect(headersObj, url);
+        
+        return {
+          present: result.detected,
+          score: result.score,
+          value: result.details.effectivePolicy || null,
+          level: result.level,
+          policies: result.policies,
+          privacy: result.details.privacyImpact,
+          analysis: `策略: ${result.details.effectivePolicy || 'N/A'}, 安全等級: ${result.level}`,
+          issues: result.details.recommendations || [],
+          details: result.details
+        };
+      }
+      
+      // 回退到簡單實作
+      console.warn('[SecurityDetectionModule] Using fallback Referrer-Policy detection');
       const referrerPolicy = headers.get('referrer-policy');
       
       if (!referrerPolicy) {
         return {
           present: false,
           score: 0,
-          details: 'No Referrer-Policy header'
+          value: null,
+          level: 'missing',
+          analysis: '未設定 Referrer-Policy header',
+          issues: [{
+            type: 'missing-header',
+            message: '建議添加 Referrer-Policy header 以控制 referrer 資訊洩露',
+            severity: 'medium'
+          }]
         };
       }
       
-      const value = referrerPolicy.toLowerCase();
-      let score = 50; // 基礎分數
+      const value = referrerPolicy.toLowerCase().trim();
       
-      // 根據策略嚴格程度評分
+      // 簡化評分
       const policyScores = {
         'no-referrer': 100,
-        'strict-origin-when-cross-origin': 90,
-        'strict-origin': 80,
-        'same-origin': 80,
+        'same-origin': 95,
+        'strict-origin': 85,
+        'strict-origin-when-cross-origin': 80,
         'origin-when-cross-origin': 70,
-        'origin': 60,
-        'no-referrer-when-downgrade': 50,
-        'unsafe-url': 0
+        'origin': 65,
+        'no-referrer-when-downgrade': 45,
+        'unsafe-url': 20
       };
       
-      score = policyScores[value] || 50;
+      const score = policyScores[value] || 50;
+      const level = score >= 90 ? 'excellent' : score >= 70 ? 'good' : score >= 50 ? 'moderate' : 'poor';
+      const privacy = score >= 80 ? 'high' : score >= 60 ? 'moderate' : 'low';
       
       return {
         present: true,
         score: score,
         value: value,
-        privacy: score >= 80 ? 'high' : score >= 60 ? 'medium' : 'low'
+        level: level,
+        privacy: privacy,
+        analysis: `使用 ${value} 策略，隱私保護等級: ${privacy}`,
+        issues: score < 70 ? [{
+          type: 'weak-policy',
+          message: '目前的 Referrer-Policy 設定提供的隱私保護有限',
+          severity: score < 50 ? 'high' : 'medium'
+        }] : []
       };
       
     } catch (error) {
       console.error('[SecurityDetectionModule] Error in detectReferrerPolicy:', error);
-      return { present: false, score: 0, error: true };
+      return { 
+        present: false, 
+        score: 0, 
+        error: true,
+        issues: [{
+          type: 'detection_error',
+          message: `檢測失敗: ${error.message}`,
+          severity: 'critical'
+        }],
+        analysis: `檢測過程中發生錯誤: ${error.message}`
+      };
     }
   }
 

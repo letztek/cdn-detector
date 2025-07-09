@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRM 檢測測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .status {
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.loading {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        video {
+            width: 100%;
+            height: 300px;
+            object-fit: contain;
+        }
+        .manifest-data {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .drm-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .drm-info h4 {
+            margin: 0 0 10px 0;
+            color: #856404;
+        }
+        .drm-system {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 8px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 DRM 檢測測試</h1>
+        <p>此頁面用於測試 CDN Detector 擴充功能的 DRM 檢測功能</p>
+        
+        <div class="test-section">
+            <h3>1. 擴充功能狀態</h3>
+            <div id="extensionStatus" class="status loading">檢查中...</div>
+            <button onclick="checkExtension()">重新檢查</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>2. 模擬 DRM 保護內容</h3>
+            <p>這些是模擬的 DRM 保護內容，用於測試檢測功能：</p>
+            
+            <div class="video-container">
+                <video id="testVideo" controls>
+                    <source src="#" type="video/mp4">
+                    您的瀏覽器不支持 video 標籤。
+                </video>
+            </div>
+            
+            <button onclick="simulateWidevine()">模擬 Widevine DRM</button>
+            <button onclick="simulatePlayReady()">模擬 PlayReady DRM</button>
+            <button onclick="simulateFairPlay()">模擬 FairPlay DRM</button>
+            <button onclick="simulateMultipleDRM()">模擬多重 DRM</button>
+            
+            <div id="drmSimulationResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>3. 檢測結果</h3>
+            <div id="detectionResults" class="drm-info">
+                <h4>DRM 檢測結果</h4>
+                <div id="detectionContent">尚未開始檢測...</div>
+            </div>
+            
+            <button onclick="getDetectionResults()">獲取檢測結果</button>
+            <button onclick="clearResults()">清除結果</button>
+        </div>
+    </div>
+
+    <script>
+        let detectionResults = {};
+        
+        function checkExtension() {
+            const statusDiv = document.getElementById('extensionStatus');
+            
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                statusDiv.className = 'status success';
+                statusDiv.textContent = '✅ 擴充功能已載入';
+                
+                // 測試與背景腳本的通信
+                chrome.runtime.sendMessage({type: 'ping'}, (response) => {
+                    if (chrome.runtime.lastError) {
+                        statusDiv.className = 'status error';
+                        statusDiv.textContent = '❌ 無法與背景腳本通信';
+                    } else {
+                        statusDiv.textContent = '✅ 擴充功能運行正常';
+                    }
+                });
+            } else {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ 擴充功能未載入';
+            }
+        }
+        
+        function simulateWidevine() {
+            const result = document.getElementById('drmSimulationResult');
+            result.style.display = 'block';
+            result.textContent = '模擬 Widevine DRM 保護...\n\n' +
+                '檢測到 ContentProtection:\n' +
+                'schemeIdUri: urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed\n' +
+                'DRM 系統: Widevine\n' +
+                '保護狀態: 已加密';
+            
+            detectionResults.widevine = {
+                system: 'Widevine',
+                uuid: 'edef8ba9-79d6-4ace-a3c8-27dcd51d21ed',
+                protected: true
+            };
+        }
+        
+        function simulatePlayReady() {
+            const result = document.getElementById('drmSimulationResult');
+            result.style.display = 'block';
+            result.textContent = '模擬 PlayReady DRM 保護...\n\n' +
+                '檢測到 ContentProtection:\n' +
+                'schemeIdUri: urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95\n' +
+                'DRM 系統: PlayReady\n' +
+                '保護狀態: 已加密';
+            
+            detectionResults.playready = {
+                system: 'PlayReady',
+                uuid: '9a04f079-9840-4286-ab92-e65be0885f95',
+                protected: true
+            };
+        }
+        
+        function simulateFairPlay() {
+            const result = document.getElementById('drmSimulationResult');
+            result.style.display = 'block';
+            result.textContent = '模擬 FairPlay DRM 保護...\n\n' +
+                '檢測到 ContentProtection:\n' +
+                'schemeIdUri: urn:uuid:94ce86fb-07ff-4f43-adb8-93d2fa968ca2\n' +
+                'DRM 系統: FairPlay\n' +
+                '保護狀態: 已加密';
+            
+            detectionResults.fairplay = {
+                system: 'FairPlay',
+                uuid: '94ce86fb-07ff-4f43-adb8-93d2fa968ca2',
+                protected: true
+            };
+        }
+        
+        function simulateMultipleDRM() {
+            const result = document.getElementById('drmSimulationResult');
+            result.style.display = 'block';
+            result.textContent = '模擬多重 DRM 保護...\n\n' +
+                '檢測到多個 ContentProtection:\n' +
+                '1. Widevine (edef8ba9-79d6-4ace-a3c8-27dcd51d21ed)\n' +
+                '2. PlayReady (9a04f079-9840-4286-ab92-e65be0885f95)\n' +
+                '3. FairPlay (94ce86fb-07ff-4f43-adb8-93d2fa968ca2)\n' +
+                '保護狀態: 已加密 (多重保護)';
+            
+            detectionResults.multiple = {
+                systems: ['Widevine', 'PlayReady', 'FairPlay'],
+                protected: true,
+                count: 3
+            };
+        }
+        
+        function getDetectionResults() {
+            const content = document.getElementById('detectionContent');
+            
+            if (Object.keys(detectionResults).length === 0) {
+                content.innerHTML = '<div class="drm-system">尚未執行任何檢測測試</div>';
+                return;
+            }
+            
+            let html = '<div style="margin-bottom: 10px;"><strong>檢測結果摘要:</strong></div>';
+            
+            Object.entries(detectionResults).forEach(([key, result]) => {
+                html += '<div class="drm-system">';
+                html += `<strong>${key.toUpperCase()}:</strong> `;
+                
+                if (result.system) {
+                    html += `${result.system}`;
+                } else if (result.systems) {
+                    html += `${result.systems.join(', ')}`;
+                }
+                
+                if (result.protected) {
+                    html += ' <span style="color: #dc3545;">🔒 已加密</span>';
+                }
+                
+                html += '</div>';
+            });
+            
+            content.innerHTML = html;
+        }
+        
+        function clearResults() {
+            detectionResults = {};
+            document.getElementById('detectionContent').innerHTML = '結果已清除';
+            document.getElementById('drmSimulationResult').style.display = 'none';
+        }
+        
+        // 頁面載入時自動檢查擴充功能
+        document.addEventListener('DOMContentLoaded', function() {
+            checkExtension();
+        });
+    </script>
+</body>
+</html>

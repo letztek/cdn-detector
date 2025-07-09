@@ -70,6 +70,9 @@ async function loadSecurityManagerModule() {
     importScripts('src/detectors/security/SecurityDetectionModule.js');
     importScripts('src/detectors/security/CSPDetector.js');
     importScripts('src/detectors/security/FrameProtectionDetector.js');
+    importScripts('src/detectors/security/ContentTypeDetector.js');
+    importScripts('src/detectors/security/HSTSDetector.js');
+    importScripts('src/detectors/security/ReferrerPolicyDetector.js');
     importScripts('src/core/security-manager.js');
     
     logMessage('All security modules loaded via importScripts', 'info');

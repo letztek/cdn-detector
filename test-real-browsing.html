@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>實際瀏覽測試 - 安全檢測</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .warning {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        .info {
+            border-left-color: #17a2b8;
+            background: #d1ecf1;
+        }
+        #testResults {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #666;
+            margin-top: 30px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-indicator.active {
+            background-color: #28a745;
+        }
+        .status-indicator.inactive {
+            background-color: #dc3545;
+        }
+        .status-indicator.warning {
+            background-color: #ffc107;
+        }
+        .instructions {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🌐 實際瀏覽測試 - 安全檢測</h1>
+        
+        <div class="instructions">
+            <h3>📋 測試說明</h3>
+            <p>這個測試頁面用來驗證 SecurityManager 在實際瀏覽網站時是否正常工作。</p>
+            <ol>
+                <li>首先點擊 "檢查 SecurityManager 狀態" 確認是否已初始化</li>
+                <li>如果狀態正常，請在新標籤頁中訪問任何網站（如 google.com）</li>
+                <li>回到這個頁面，點擊 "獲取安全檢測數據" 查看是否檢測到安全標頭</li>
+                <li>如果仍有問題，點擊 "強制重新初始化" 嘗試修復</li>
+            </ol>
+        </div>
+        
+        <div class="test-section">
+            <h2>基本狀態檢查</h2>
+            <button class="test-button" id="checkStatus">🔍 檢查 SecurityManager 狀態</button>
+            <button class="test-button" id="forceInit">🔄 強制重新初始化</button>
+            <button class="test-button" id="clearResults">🗑️ 清除結果</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>安全檢測測試</h2>
+            <button class="test-button" id="getCurrentTabSecurity">🛡️ 獲取當前標籤頁安全數據</button>
+            <button class="test-button" id="getAllTabsSecurity">📊 獲取所有標籤頁安全數據</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>調試資訊</h2>
+            <button class="test-button" id="getDebugLogs">📝 獲取調試日誌</button>
+            <button class="test-button" id="getExtensionInfo">ℹ️ 獲取擴展信息</button>
+        </div>
+        
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        let testResults = document.getElementById('testResults');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `test-result ${type}`;
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            testResults.appendChild(logEntry);
+            console.log(`[${timestamp}] ${message}`);
+            
+            // 自動滾動到底部
+            testResults.scrollTop = testResults.scrollHeight;
+        }
+        
+        function clearResults() {
+            testResults.innerHTML = '';
+        }
+        
+        function formatJSON(obj) {
+            return `<pre>${JSON.stringify(obj, null, 2)}</pre>`;
+        }
+        
+        // 檢查 SecurityManager 狀態
+        document.getElementById('checkStatus').addEventListener('click', async () => {
+            log('🔍 開始檢查 SecurityManager 狀態...', 'info');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_STATUS' });
+                
+                if (response && response.success) {
+                    const status = response.status;
+                    
+                    if (status.enabled) {
+                        log(`✅ SecurityManager 已啟用並正常運行`, 'success');
+                        log(`狀態詳情: ${formatJSON(status)}`, 'info');
+                    } else {
+                        log(`⚠️ SecurityManager 未啟用`, 'warning');
+                        log(`錯誤信息: ${status.error || '未知錯誤'}`, 'warning');
+                        log(`狀態詳情: ${formatJSON(status)}`, 'info');
+                    }
+                } else {
+                    log(`❌ 無法獲取 SecurityManager 狀態`, 'error');
+                    log(`錯誤: ${response?.error || '未知錯誤'}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ 檢查狀態時發生錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 強制重新初始化
+        document.getElementById('forceInit').addEventListener('click', async () => {
+            log('🔄 嘗試強制重新初始化 SecurityManager...', 'info');
+            
+            try {
+                // 先嘗試獲取狀態觸發初始化
+                const statusResponse = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_STATUS' });
+                
+                // 等待一秒
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // 再次檢查狀態
+                const statusResponse2 = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_STATUS' });
+                
+                if (statusResponse2?.success && statusResponse2.status?.enabled) {
+                    log(`✅ 重新初始化成功！SecurityManager 現在正常運行`, 'success');
+                } else {
+                    log(`⚠️ 重新初始化可能失敗`, 'warning');
+                    log(`當前狀態: ${statusResponse2?.status?.error || '未知'}`, 'warning');
+                }
+            } catch (error) {
+                log(`❌ 重新初始化時發生錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 獲取當前標籤頁安全數據
+        document.getElementById('getCurrentTabSecurity').addEventListener('click', async () => {
+            log('🛡️ 正在獲取當前標籤頁安全檢測數據...', 'info');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_DATA' });
+                
+                if (response && response.success) {
+                    log(`✅ 成功獲取安全檢測數據`, 'success');
+                    log(`數據內容: ${formatJSON(response.data)}`, 'info');
+                    
+                    // 分析數據
+                    const data = response.data;
+                    if (data && data.headers) {
+                        let foundHeaders = 0;
+                        if (data.headers.csp) foundHeaders++;
+                        if (data.headers.frameProtection) foundHeaders++;
+                        
+                        if (foundHeaders > 0) {
+                            log(`🎉 檢測到 ${foundHeaders} 種安全標頭`, 'success');
+                        } else {
+                            log(`ℹ️ 當前網站未檢測到安全標頭`, 'info');
+                        }
+                    } else {
+                        log(`ℹ️ 暫無安全檢測數據（可能需要瀏覽網站後重試）`, 'info');
+                    }
+                } else {
+                    log(`⚠️ 無法獲取安全檢測數據`, 'warning');
+                    log(`錯誤: ${response?.error || '未知錯誤'}`, 'warning');
+                }
+            } catch (error) {
+                log(`❌ 獲取安全數據時發生錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 獲取所有標籤頁安全數據
+        document.getElementById('getAllTabsSecurity').addEventListener('click', async () => {
+            log('📊 正在獲取所有標籤頁的安全檢測統計...', 'info');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'GET_SECURITY_STATS' });
+                
+                if (response && response.success) {
+                    log(`✅ 成功獲取安全檢測統計`, 'success');
+                    log(`統計數據: ${formatJSON(response.stats)}`, 'info');
+                } else {
+                    log(`⚠️ 無法獲取安全檢測統計`, 'warning');
+                    log(`錯誤: ${response?.error || '未知錯誤'}`, 'warning');
+                }
+            } catch (error) {
+                log(`❌ 獲取統計數據時發生錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 獲取調試日誌
+        document.getElementById('getDebugLogs').addEventListener('click', async () => {
+            log('📝 正在獲取調試日誌...', 'info');
+            
+            try {
+                const result = await chrome.storage.local.get(['debugLogs']);
+                const logs = result.debugLogs || [];
+                
+                log(`✅ 獲取到 ${logs.length} 條調試日誌`, 'success');
+                
+                if (logs.length > 0) {
+                    // 顯示最近 10 條日誌
+                    const recentLogs = logs.slice(-10);
+                    log(`最近 10 條日誌: ${formatJSON(recentLogs)}`, 'info');
+                    
+                    // 檢查是否有 SecurityManager 相關日誌
+                    const securityLogs = logs.filter(log => log.includes('Security'));
+                    if (securityLogs.length > 0) {
+                        log(`找到 ${securityLogs.length} 條安全相關日誌`, 'info');
+                        log(`安全日誌樣本: ${formatJSON(securityLogs.slice(-5))}`, 'info');
+                    }
+                } else {
+                    log(`ℹ️ 暫無調試日誌`, 'info');
+                }
+            } catch (error) {
+                log(`❌ 獲取調試日誌時發生錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 獲取擴展信息
+        document.getElementById('getExtensionInfo').addEventListener('click', async () => {
+            log('ℹ️ 正在獲取擴展基本信息...', 'info');
+            
+            try {
+                const manifest = chrome.runtime.getManifest();
+                log(`擴展名稱: ${manifest.name}`, 'info');
+                log(`版本: ${manifest.version}`, 'info');
+                log(`Manifest 版本: ${manifest.manifest_version}`, 'info');
+                
+                // 檢查權限
+                const permissions = manifest.permissions || [];
+                log(`權限: ${permissions.join(', ')}`, 'info');
+                
+                // 檢查 web_accessible_resources
+                const webResources = manifest.web_accessible_resources || [];
+                if (webResources.length > 0 && webResources[0].resources) {
+                    const securityResources = webResources[0].resources.filter(r => r.includes('security'));
+                    log(`安全相關資源: ${securityResources.join(', ')}`, 'info');
+                }
+                
+                log(`✅ 擴展信息獲取完成`, 'success');
+            } catch (error) {
+                log(`❌ 獲取擴展信息時發生錯誤: ${error.message}`, 'error');
+            }
+        });
+        
+        // 清除結果
+        document.getElementById('clearResults').addEventListener('click', clearResults);
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🌐 實際瀏覽測試頁面已載入', 'info');
+            log('請按照說明進行測試，驗證 SecurityManager 是否正常工作', 'info');
+        });
+    </script>
+</body>
+</html>

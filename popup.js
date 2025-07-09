@@ -2062,6 +2062,11 @@ function updateOtherSecurityHeaders(headers) {
     updateContentTypeResults(headers.contentType);
   }
   
+  // 更新 Referrer Policy 檢測結果
+  if (headers.referrerPolicy) {
+    updateReferrerPolicyResults(headers.referrerPolicy);
+  }
+  
   // 記錄其他安全標頭供調試使用
   console.log('Other security headers:', {
     hsts: headers.hsts,
@@ -2086,8 +2091,34 @@ function updateHSTSResults(hstsData) {
   // 更新狀態徽章
   if (hstsStatusBadge) {
     if (hstsData.present) {
-      hstsStatusBadge.textContent = '已檢測';
-      hstsStatusBadge.className = 'status-badge present';
+      // 根據強度等級設置狀態
+      if (hstsData.strength) {
+        switch (hstsData.strength) {
+          case 'excellent':
+            hstsStatusBadge.textContent = '優秀配置';
+            hstsStatusBadge.className = 'status-badge present';
+            break;
+          case 'good':
+            hstsStatusBadge.textContent = '良好配置';
+            hstsStatusBadge.className = 'status-badge present';
+            break;
+          case 'average':
+            hstsStatusBadge.textContent = '基本配置';
+            hstsStatusBadge.className = 'status-badge partial';
+            break;
+          case 'poor':
+          case 'weak':
+            hstsStatusBadge.textContent = '弱配置';
+            hstsStatusBadge.className = 'status-badge partial';
+            break;
+          default:
+            hstsStatusBadge.textContent = '已檢測';
+            hstsStatusBadge.className = 'status-badge present';
+        }
+      } else {
+        hstsStatusBadge.textContent = '已檢測';
+        hstsStatusBadge.className = 'status-badge present';
+      }
     } else {
       hstsStatusBadge.textContent = '未檢測';
       hstsStatusBadge.className = 'status-badge missing';
@@ -2098,18 +2129,41 @@ function updateHSTSResults(hstsData) {
   if (hstsScoreBadge && hstsData.score !== undefined) {
     hstsScoreBadge.textContent = `${hstsData.score}/100`;
     
-    if (hstsData.score >= 80) {
-      hstsScoreBadge.className = 'score-badge excellent';
-    } else if (hstsData.score >= 60) {
-      hstsScoreBadge.className = 'score-badge good';
+    // 根據等級設置樣式
+    if (hstsData.level) {
+      switch (hstsData.level) {
+        case 'excellent':
+          hstsScoreBadge.className = 'score-badge excellent';
+          break;
+        case 'good':
+          hstsScoreBadge.className = 'score-badge good';
+          break;
+        case 'average':
+          hstsScoreBadge.className = 'score-badge good';
+          break;
+        case 'poor':
+        case 'dangerous':
+          hstsScoreBadge.className = 'score-badge poor';
+          break;
+        default:
+          hstsScoreBadge.className = 'score-badge';
+      }
     } else {
-      hstsScoreBadge.className = 'score-badge poor';
+      // 舊版本的評分邏輯
+      if (hstsData.score >= 80) {
+        hstsScoreBadge.className = 'score-badge excellent';
+      } else if (hstsData.score >= 60) {
+        hstsScoreBadge.className = 'score-badge good';
+      } else {
+        hstsScoreBadge.className = 'score-badge poor';
+      }
     }
   }
   
   // 更新 HSTS 值顯示
   if (hstsValue) {
     if (hstsData.present && hstsData.raw) {
+      // 顯示完整的 HSTS 配置
       hstsValue.textContent = hstsData.raw.substring(0, 100) + (hstsData.raw.length > 100 ? '...' : '');
     } else if (hstsData.present) {
       hstsValue.textContent = '檢測到 HSTS 標頭';
@@ -2120,29 +2174,50 @@ function updateHSTSResults(hstsData) {
   
   // 更新分析資訊
   if (hstsAnalysis) {
-    if (hstsData.present && hstsData.details) {
+    if (hstsData.analysis) {
+      // 使用 HSTSDetector 提供的分析
+      hstsAnalysis.innerHTML = hstsData.analysis.replace(/\n/g, '<br>');
+    } else if (hstsData.present) {
+      // 降級到基本分析
       let analysisText = [];
       
-      if (hstsData.details.maxAge) {
+      // 處理 max-age 資訊
+      if (hstsData.maxAge !== undefined && hstsData.maxAge !== null) {
+        const days = Math.floor(hstsData.maxAge / 86400);
+        analysisText.push(`有效期: ${days} 天`);
+      } else if (hstsData.details && hstsData.details.maxAge) {
         const days = Math.floor(hstsData.details.maxAge / 86400);
         analysisText.push(`有效期: ${days} 天`);
       }
       
-      if (hstsData.details.includeSubDomains) {
+      // 處理 includeSubDomains
+      if (hstsData.includeSubDomains || (hstsData.details && hstsData.details.includeSubDomains)) {
         analysisText.push('包含子域名');
       }
       
-      if (hstsData.details.preload) {
-        analysisText.push('支持預載入');
+      // 處理 preload
+      if (hstsData.preload || (hstsData.details && hstsData.details.preload)) {
+        analysisText.push('支援預載入');
       }
       
       hstsAnalysis.textContent = analysisText.join(' | ') || 'HSTS 配置基本';
-    } else if (hstsData.present) {
-      hstsAnalysis.textContent = '基本 HSTS 配置';
     } else {
       hstsAnalysis.textContent = '建議啟用 HSTS 以強制 HTTPS 連接';
     }
   }
+  
+  // 記錄詳細資訊供調試使用
+  console.log('HSTS detection result:', {
+    present: hstsData.present,
+    score: hstsData.score,
+    level: hstsData.level,
+    strength: hstsData.strength,
+    maxAge: hstsData.maxAge,
+    includeSubDomains: hstsData.includeSubDomains,
+    preload: hstsData.preload,
+    issues: hstsData.issues,
+    recommendations: hstsData.recommendations
+  });
 }
 
 function updateContentTypeResults(contentTypeData) {
@@ -2160,8 +2235,17 @@ function updateContentTypeResults(contentTypeData) {
   // 更新狀態徽章
   if (contentTypeStatusBadge) {
     if (contentTypeData.present) {
-      contentTypeStatusBadge.textContent = '已檢測';
-      contentTypeStatusBadge.className = 'status-badge present';
+      // 根據保護等級設置狀態
+      if (contentTypeData.protection === 'full') {
+        contentTypeStatusBadge.textContent = '完整保護';
+        contentTypeStatusBadge.className = 'status-badge present';
+      } else if (contentTypeData.protection === 'partial') {
+        contentTypeStatusBadge.textContent = '部分保護';
+        contentTypeStatusBadge.className = 'status-badge partial';
+      } else {
+        contentTypeStatusBadge.textContent = '已檢測';
+        contentTypeStatusBadge.className = 'status-badge present';
+      }
     } else {
       contentTypeStatusBadge.textContent = '未檢測';
       contentTypeStatusBadge.className = 'status-badge missing';
@@ -2172,12 +2256,34 @@ function updateContentTypeResults(contentTypeData) {
   if (contentTypeScoreBadge && contentTypeData.score !== undefined) {
     contentTypeScoreBadge.textContent = `${contentTypeData.score}/100`;
     
-    if (contentTypeData.score >= 80) {
-      contentTypeScoreBadge.className = 'score-badge excellent';
-    } else if (contentTypeData.score >= 60) {
-      contentTypeScoreBadge.className = 'score-badge good';
+    // 根據等級設置樣式
+    if (contentTypeData.level) {
+      switch (contentTypeData.level) {
+        case 'excellent':
+          contentTypeScoreBadge.className = 'score-badge excellent';
+          break;
+        case 'good':
+          contentTypeScoreBadge.className = 'score-badge good';
+          break;
+        case 'average':
+          contentTypeScoreBadge.className = 'score-badge good';
+          break;
+        case 'poor':
+        case 'dangerous':
+          contentTypeScoreBadge.className = 'score-badge poor';
+          break;
+        default:
+          contentTypeScoreBadge.className = 'score-badge';
+      }
     } else {
-      contentTypeScoreBadge.className = 'score-badge poor';
+      // 舊版本的評分邏輯
+      if (contentTypeData.score >= 80) {
+        contentTypeScoreBadge.className = 'score-badge excellent';
+      } else if (contentTypeData.score >= 60) {
+        contentTypeScoreBadge.className = 'score-badge good';
+      } else {
+        contentTypeScoreBadge.className = 'score-badge poor';
+      }
     }
   }
   
@@ -2194,14 +2300,30 @@ function updateContentTypeResults(contentTypeData) {
   
   // 更新分析資訊
   if (contentTypeAnalysis) {
-    if (contentTypeData.present && contentTypeData.correct) {
-      contentTypeAnalysis.textContent = '正確配置，可防止 MIME 類型嗅探攻擊';
-    } else if (contentTypeData.present) {
-      contentTypeAnalysis.textContent = '檢測到標頭，但可能配置不正確';
+    if (contentTypeData.analysis) {
+      // 使用 ContentTypeDetector 提供的分析
+      contentTypeAnalysis.innerHTML = contentTypeData.analysis.replace(/\n/g, '<br>');
     } else {
-      contentTypeAnalysis.textContent = '建議添加 X-Content-Type-Options: nosniff 標頭';
+      // 降級到基本分析
+      if (contentTypeData.present && contentTypeData.correct) {
+        contentTypeAnalysis.textContent = '正確配置，可防止 MIME 類型嗅探攻擊';
+      } else if (contentTypeData.present) {
+        contentTypeAnalysis.textContent = '檢測到標頭，但可能配置不正確';
+      } else {
+        contentTypeAnalysis.textContent = '建議添加 X-Content-Type-Options: nosniff 標頭';
+      }
     }
   }
+  
+  // 記錄詳細資訊供調試使用
+  console.log('Content-Type Options detection result:', {
+    present: contentTypeData.present,
+    score: contentTypeData.score,
+    level: contentTypeData.level,
+    protection: contentTypeData.protection,
+    value: contentTypeData.value,
+    issues: contentTypeData.issues
+  });
 }
 
 function updateOverallSecurityScore(securityData) {
@@ -2316,6 +2438,144 @@ function showNoSecurityData() {
   if (noSecurityData) {
     noSecurityData.style.display = 'block';
   }
+}
+
+function updateReferrerPolicyResults(referrerPolicyData) {
+  const referrerPolicyResult = document.getElementById('referrerPolicyResult');
+  const referrerPolicyStatusBadge = document.getElementById('referrerPolicyStatusBadge');
+  const referrerPolicyScoreBadge = document.getElementById('referrerPolicyScoreBadge');
+  const referrerPolicyValue = document.getElementById('referrerPolicyValue');
+  const referrerPolicyAnalysis = document.getElementById('referrerPolicyAnalysis');
+
+  if (!referrerPolicyResult) {
+    console.warn('Referrer Policy UI elements not found, skipping update');
+    return;
+  }
+
+  console.log('Updating Referrer Policy results:', referrerPolicyData);
+
+  // 更新狀態標誌
+  if (referrerPolicyStatusBadge) {
+    referrerPolicyStatusBadge.className = 'badge';
+    if (referrerPolicyData.present) {
+      // 根據安全等級設定顏色
+      switch (referrerPolicyData.level) {
+        case 'excellent':
+          referrerPolicyStatusBadge.className += ' badge-success';
+          referrerPolicyStatusBadge.textContent = '優秀';
+          break;
+        case 'good':
+          referrerPolicyStatusBadge.className += ' badge-primary';
+          referrerPolicyStatusBadge.textContent = '良好';
+          break;
+        case 'moderate':
+          referrerPolicyStatusBadge.className += ' badge-warning';
+          referrerPolicyStatusBadge.textContent = '普通';
+          break;
+        case 'poor':
+          referrerPolicyStatusBadge.className += ' badge-danger';
+          referrerPolicyStatusBadge.textContent = '較弱';
+          break;
+        default:
+          referrerPolicyStatusBadge.className += ' badge-secondary';
+          referrerPolicyStatusBadge.textContent = '未知';
+      }
+    } else {
+      referrerPolicyStatusBadge.className += ' badge-danger';
+      referrerPolicyStatusBadge.textContent = '未設定';
+    }
+  }
+
+  // 更新評分標誌
+  if (referrerPolicyScoreBadge) {
+    referrerPolicyScoreBadge.className = 'badge';
+    const score = referrerPolicyData.score || 0;
+    
+    if (score >= 90) {
+      referrerPolicyScoreBadge.className += ' badge-success';
+    } else if (score >= 70) {
+      referrerPolicyScoreBadge.className += ' badge-primary';
+    } else if (score >= 50) {
+      referrerPolicyScoreBadge.className += ' badge-warning';
+    } else {
+      referrerPolicyScoreBadge.className += ' badge-danger';
+    }
+    
+    referrerPolicyScoreBadge.textContent = `${score}/100`;
+  }
+
+  // 更新策略值
+  if (referrerPolicyValue) {
+    if (referrerPolicyData.present && referrerPolicyData.value) {
+      // 顯示有效策略
+      const policy = referrerPolicyData.value;
+      let displayText = policy;
+      
+      // 添加隱私等級指示
+      if (referrerPolicyData.privacy) {
+        const privacyLabel = {
+          'maximum': '極高隱私',
+          'high': '高隱私',
+          'moderate': '中等隱私',
+          'low': '低隱私',
+          'very-low': '極低隱私'
+        }[referrerPolicyData.privacy] || referrerPolicyData.privacy;
+        
+        displayText += ` (${privacyLabel})`;
+      }
+      
+      referrerPolicyValue.textContent = displayText;
+      
+      // 如果有多個策略，顯示額外資訊
+      if (referrerPolicyData.policies && referrerPolicyData.policies.length > 1) {
+        referrerPolicyValue.textContent += ` [${referrerPolicyData.policies.length} 個策略]`;
+      }
+    } else {
+      referrerPolicyValue.textContent = '未設定 Referrer-Policy header';
+    }
+  }
+
+  // 更新分析資訊
+  if (referrerPolicyAnalysis) {
+    if (referrerPolicyData.analysis) {
+      referrerPolicyAnalysis.innerHTML = referrerPolicyData.analysis.replace(/\n/g, '<br>');
+    } else {
+      // 降級到基本分析
+      if (referrerPolicyData.present) {
+        const privacy = referrerPolicyData.privacy || 'unknown';
+        referrerPolicyAnalysis.textContent = `使用 ${referrerPolicyData.value} 策略，隱私保護等級: ${privacy}`;
+      } else {
+        referrerPolicyAnalysis.textContent = '建議添加 Referrer-Policy header 以控制 referrer 資訊洩露';
+      }
+    }
+    
+    // 添加問題和建議
+    if (referrerPolicyData.issues && referrerPolicyData.issues.length > 0) {
+      const issuesHtml = referrerPolicyData.issues.map(issue => {
+        const severityClass = {
+          'critical': 'text-danger',
+          'high': 'text-danger', 
+          'medium': 'text-warning',
+          'low': 'text-info'
+        }[issue.severity] || 'text-secondary';
+        
+        return `<div class="${severityClass}">• ${issue.message}</div>`;
+      }).join('');
+      
+      referrerPolicyAnalysis.innerHTML += '<br><strong>建議：</strong><br>' + issuesHtml;
+    }
+  }
+
+  // 記錄詳細資訊供調試使用
+  console.log('Referrer Policy detection result:', {
+    present: referrerPolicyData.present,
+    score: referrerPolicyData.score,
+    level: referrerPolicyData.level,
+    value: referrerPolicyData.value,
+    privacy: referrerPolicyData.privacy,
+    policies: referrerPolicyData.policies,
+    issues: referrerPolicyData.issues
+  });
 }
 
 // 輔助函數：發送消息給背景腳本
