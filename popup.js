@@ -2452,6 +2452,9 @@ function updateReferrerPolicyResults(referrerPolicyData) {
     return;
   }
 
+  // 顯示 Referrer Policy 檢測結果區域
+  referrerPolicyResult.style.display = 'block';
+
   console.log('Updating Referrer Policy results:', referrerPolicyData);
 
   // 更新狀態標誌
