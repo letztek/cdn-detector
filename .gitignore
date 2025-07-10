@@ -36,4 +36,14 @@ node_modules/
 
 # Task files
 # tasks.json
-# tasks/ 
+# tasks/
+
+# Test HTML files
+test*.html
+demo*.html
+example*.html
+
+# Documentation (except README)
+docs/
+*.md
+!README.md 
